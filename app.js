@@ -7,14 +7,16 @@ const COLORS = [
   ['#ec4899', '#8b5cf6', 'Orchidea'], ['#f59e0b', '#ef4444', 'Fuoco'], ['#0ea5e9', '#6366f1', 'Notte']
 ];
 const TYPES = {
-  olio:          { label: 'Cambio olio',          icon: '🛢️', km: 15000,  mo: 12 },
-  filtro:        { label: 'Filtro olio',          icon: '⚙️', km: 15000,  mo: 12 },
-  tagliando:     { label: 'Tagliando',            icon: '🔧', km: 15000,  mo: 12 },
-  cinghia:       { label: 'Cinghia distribuzione', icon: '🔗', km: 120000, mo: 60 },
-  gomme:         { label: 'Cambio gomme',         icon: '🔄', km: 40000,  mo: 60 },
-  revisione:     { label: 'Revisione',            icon: '✅', km: 0,      mo: 24 },
-  bollo:         { label: 'Bollo',                icon: '🧾', km: 0,      mo: 12 },
-  assicurazione: { label: 'Assicurazione',        icon: '🛡️', km: 0,      mo: 12 }
+  olio:          { label: 'Cambio olio e filtro',  short: 'Olio',          icon: '🛢️', km: 15000,  mo: 0, kmOnly: true },
+  tagliando:     { label: 'Tagliando',             short: 'Tagliando',     icon: '🔧', km: 15000,  mo: 12 },
+  cinghia:       { label: 'Cinghia distribuzione', short: 'Cinghia',       icon: '🔗', km: 120000, mo: 60 },
+  gomme:         { label: 'Cambio gomme',          short: 'Gomme',         icon: '🔄', km: 40000,  mo: 60 },
+  filtroaria:    { label: 'Filtro aria',           short: 'Filtro aria',   icon: '🌬️', km: 30000,  mo: 24 },
+  abitacolo:     { label: 'Filtro abitacolo',      short: 'F. abitacolo',  icon: '🍃', km: 15000,  mo: 12 },
+  carburante:    { label: 'Filtro carburante',     short: 'F. carburante', icon: '⛽', km: 60000,  mo: 48 },
+  revisione:     { label: 'Revisione',             short: 'Revisione',     icon: '✅', km: 0,      mo: 24 },
+  bollo:         { label: 'Bollo',                 short: 'Bollo',         icon: '🧾', km: 0,      mo: 12 },
+  assicurazione: { label: 'Assicurazione',         short: 'Assicurazione', icon: '🛡️', km: 0,      mo: 12 }
 };
 const ORDER = Object.keys(TYPES);
 const ICONS = {
@@ -29,7 +31,8 @@ const ICONS = {
   trash: 'M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3',
   dl: 'M12 4v11M7 11l5 5 5-5M5 20h14',
   ul: 'M12 16V5M7 9l5-5 5 5M5 20h14',
-  bell: 'M6 17h12l-2-3v-4a4 4 0 0 0-8 0v4zM10 20h4'
+  bell: 'M6 17h12l-2-3v-4a4 4 0 0 0-8 0v4zM10 20h4',
+  cam: 'M4 8h3l2-3h6l2 3h3v11H4zM12 17a3.5 3.5 0 1 0 0-7a3.5 3.5 0 1 0 0 7'
 };
 const ico = n => `<svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="${ICONS[n]}"/></svg>`;
 
@@ -62,7 +65,7 @@ function fmonths(n) {
 }
 
 /* ---------- stato ---------- */
-function blank() { return { vehicles: [], records: [], rules: {}, settings: { theme: 'auto', color: 0, cur: null } }; }
+function blank() { return { vehicles: [], records: [], rules: {}, settings: { theme: 'auto', color: 0, cur: null, view: 'detail' } }; }
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
@@ -72,15 +75,40 @@ function load() {
 }
 function normalize(s) {
   const b = blank();
-  return {
+  const o = {
     vehicles: s.vehicles || [], records: s.records || [], rules: s.rules || {},
     settings: Object.assign(b.settings, s.settings || {})
   };
+  /* v1.1: il filtro olio e' unito al cambio olio; l'olio ha solo ricorrenza a km */
+  o.records = o.records.filter(r => {
+    if (r.type === 'filtro') {
+      const m = o.records.find(x => x.vid === r.vid && x.type === 'olio' && x.date === r.date);
+      if (m) { m.filter = true; return false; }
+      r.type = 'olio'; r.filter = true; return true;
+    }
+    if (r.type === 'olio' && r.filter === undefined) r.filter = true;
+    return true;
+  });
+  for (const k of Object.keys(o.rules)) {
+    const [vid, tp] = k.split(':'), r = o.rules[k];
+    if (tp === 'filtro') {
+      if (!o.rules[vid + ':olio'] && r.everyKm) o.rules[vid + ':olio'] = { everyKm: r.everyKm, everyMonths: null, remindKm: r.remindKm || 0, remindDays: 0 };
+      delete o.rules[k];
+    }
+  }
+  for (const k of Object.keys(o.rules)) if (k.endsWith(':olio')) {
+    const r = o.rules[k]; r.everyMonths = null; r.remindDays = 0;
+    if (!r.everyKm) delete o.rules[k];
+  }
+  return o;
 }
 let S = load();
 let tab = 'home';
 let histFilter = '';
-const save = () => localStorage.setItem(KEY, JSON.stringify(S));
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(S)); return true; }
+  catch (e) { toast('Memoria piena: prova con una foto piu piccola'); return false; }
+}
 const curVeh = () => S.vehicles.find(v => v.id === S.settings.cur) || S.vehicles[0] || null;
 
 /* ---------- logica scadenze ---------- */
@@ -193,7 +221,7 @@ function googleUrl(ev) {
 const icsEsc = s => String(s).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\n/g, '\\n');
 function buildIcs(events) {
   const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
-  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Scadenze Auto//IT', 'CALSCALE:GREGORIAN'];
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Smemo-Garage//IT', 'CALSCALE:GREGORIAN'];
   for (const e of events) {
     L.push('BEGIN:VEVENT', `UID:${e.uid}`, `DTSTAMP:${stamp}`,
       `DTSTART;VALUE=DATE:${e.date.replace(/-/g, '')}`, `DTEND;VALUE=DATE:${addDays(e.date, 1).replace(/-/g, '')}`,
@@ -213,6 +241,13 @@ function download(name, mime, text) {
 }
 
 /* ---------- tema ---------- */
+const LOGO_MARK = '<path d="M16 60V35L40 18l24 17v25z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/><path d="M27 44h26M27 50h26M27 56h26" stroke="#fff" stroke-width="3" stroke-linecap="round"/>';
+const logo = s => `<svg class="logo" width="${s}" height="${s}" viewBox="0 0 80 80" aria-hidden="true"><rect width="80" height="80" rx="18" fill="url(#lg)"/>${LOGO_MARK}</svg>`;
+function setFavicon(c) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c[0]}"/><stop offset="1" stop-color="${c[1]}"/></linearGradient></defs><rect width="80" height="80" rx="18" fill="url(#g)"/>${LOGO_MARK}</svg>`;
+  const l = document.querySelector('link[rel=icon]');
+  if (l) { l.type = 'image/svg+xml'; l.href = 'data:image/svg+xml,' + encodeURIComponent(svg); }
+}
 function applyTheme() {
   const st = S.settings, c = COLORS[st.color] || COLORS[0], r = document.documentElement;
   r.dataset.theme = st.theme;
@@ -220,6 +255,7 @@ function applyTheme() {
   const dark = st.theme === 'dark' || (st.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
   const m = document.querySelector('meta[name=theme-color]');
   if (m) m.content = dark ? '#0e0f1e' : '#f3f4fb';
+  setFavicon(c);
 }
 
 /* ---------- viste ---------- */
@@ -236,8 +272,8 @@ function render() {
     ${navBtn('hist', 'hist', 'Storico')}${navBtn('set', 'set', 'Impostazioni')}</div></nav>`;
 }
 function emptyHTML() {
-  return `<div class="top"><h1>Garage</h1></div><div class="card empty"><div class="big">🚗</div>
-    <h2 style="margin:8px 0">Aggiungi il tuo primo veicolo</h2>
+  return `<div class="top"><div class="brand">${logo(32)}<h1>Smemo-Garage</h1></div></div><div class="card empty">${logo(72)}
+    <h2 style="margin:12px 0 8px">Aggiungi il tuo primo veicolo</h2>
     <p class="muted">Registra auto e moto, poi tieni sotto controllo olio, cinghia, bollo e il resto.</p>
     <button class="btn pri" data-act="addveh">${ico('plus')} Aggiungi veicolo</button></div>`;
 }
@@ -247,24 +283,42 @@ function chipsHTML() {
     ${ico(v.type === 'moto' ? 'moto' : 'car')} ${esc(v.name)}${vehLevel(v) === 2 ? '<span class="dot"></span>' : ''}</button>`).join('')}
     <button class="chip" data-act="addveh">${ico('plus')} Veicolo</button></div>`;
 }
+const photoStyle = p => `transform:translate(${(p.tx * 100).toFixed(2)}%,${(p.ty * 100).toFixed(2)}%) scale(${p.s})`;
+function heroHTML(v, summary) {
+  const p = v.photo;
+  return `<div class="hero ${p ? 'hasph' : ''}">${p ? `<img class="pimg" alt="" src="${p.data}" style="${photoStyle(p)}">` : ''}
+    <div class="row"><span class="small" style="opacity:.92">${esc(v.plate || (v.type === 'moto' ? 'Moto' : 'Auto'))}</span>
+      <button class="glass cam" data-act="photo" aria-label="Foto del veicolo">${ico('cam')}</button></div>
+    <div class="km">${fk(v.km)} km</div>
+    <div class="row small"><span>${summary}<br><span style="opacity:.85">${v.kmDate ? 'Aggiornato il ' + fd(v.kmDate) : ''}</span></span>
+      <button class="glass" data-act="km">${ico('edit')} Aggiorna km</button></div></div>`;
+}
+function tileHTML(v, type) {
+  const T = TYPES[type], st = status(v, type);
+  let cls = 'no', txt;
+  if (st.level === 'none') txt = st.last ? 'Senza ricorrenza' : 'Da impostare';
+  else { cls = { ok: 'ok', soon: 'so', late: 'la' }[st.level]; txt = cap(st.headline); }
+  return `<button class="tile" data-act="item" data-v="${v.id}" data-t="${type}"><b><span class="bd ${cls}"></span>${T.short}</b><span class="tx ${cls}">${txt}</span></button>`;
+}
 function homeHTML(v) {
   const sts = ORDER.map(t => status(v, t));
   const late = sts.filter(s => s.level === 'late').length, soon = sts.filter(s => s.level === 'soon').length;
   const summary = late || soon
     ? [late ? `${late} ${late === 1 ? 'scaduta' : 'scadute'}` : '', soon ? `${soon} in arrivo` : ''].filter(Boolean).join(' · ')
     : 'Tutto in regola';
-  const alerts = allAlerts();
+  const over = S.settings.view === 'over';
+  const alerts = over ? [] : allAlerts();
   const al = alerts.slice(0, 5).map(a => `<button class="alert ${a.st.level}" data-act="item" data-v="${a.v.id}" data-t="${a.type}">
     <span class="ic">${a.st.level === 'late' ? '⚠️' : '🔔'}</span>
     <span><b>${esc(a.v.name)} · ${TYPES[a.type].label}</b><br>${cap(a.st.parts.filter(p => p.l === (a.st.level === 'late' ? 2 : 1)).map(p => p.txt).join(' · ') || a.st.headline)}</span></button>`).join('');
-  return `<div class="top"><h1>Garage</h1><button class="btn" data-act="editveh" aria-label="Modifica veicolo">${ico('edit')}</button></div>
-    ${chipsHTML()}
-    <div class="hero"><div class="row"><div><div class="small" style="opacity:.9">${esc(v.plate || (v.type === 'moto' ? 'Moto' : 'Auto'))}</div>
-      <div class="km">${fk(v.km)} km</div></div>
-      <button class="glass" data-act="km">${ico('edit')} Aggiorna km</button></div>
-      <div class="row small" style="position:relative;z-index:1"><span>${summary}</span><span style="opacity:.85">${v.kmDate ? 'Aggiornato il ' + fd(v.kmDate) : ''}</span></div></div>
-    ${alerts.length ? `<div class="sec">Da controllare</div><div class="alerts">${al}${alerts.length > 5 ? `<div class="muted small" style="padding:2px 4px">e altre ${alerts.length - 5}</div>` : ''}</div>` : ''}
-    <div class="sec">Scadenze di ${esc(v.name)}</div>${ORDER.map(t => itemCard(v, t)).join('')}`;
+  const body = over
+    ? `<div class="tiles">${ORDER.map(t => tileHTML(v, t)).join('')}</div>`
+    : `${alerts.length ? `<div class="sec">Da controllare</div><div class="alerts">${al}${alerts.length > 5 ? `<div class="muted small" style="padding:2px 4px">e altre ${alerts.length - 5}</div>` : ''}</div>` : ''}
+      <div class="sec">Scadenze di ${esc(v.name)}</div>${ORDER.map(t => itemCard(v, t)).join('')}`;
+  return `<div class="top"><div class="brand">${logo(32)}<h1>Smemo-Garage</h1></div><button class="btn" data-act="editveh" aria-label="Modifica veicolo">${ico('edit')}</button></div>
+    ${chipsHTML()}${heroHTML(v, summary)}
+    <div class="seg" style="margin:14px 0 10px"><button class="${over ? '' : 'on'}" data-act="view" data-v="detail">Dettaglio</button><button class="${over ? 'on' : ''}" data-act="view" data-v="over">Panoramica</button></div>
+    ${body}`;
 }
 function itemCard(v, type) {
   const T = TYPES[type], st = status(v, type);
@@ -283,17 +337,22 @@ function itemCard(v, type) {
 }
 function recSub(r) {
   const p = [];
-  if (r.oilType || r.oilBrand) p.push([r.oilType, r.oilBrand].filter(Boolean).join(' · '));
+  if (r.type === 'olio') {
+    const o = [r.oilType, r.oilBrand].filter(Boolean).join(' · ');
+    if (o) p.push(o);
+    if (r.filter) p.push('con filtro');
+  }
   if (r.notes) p.push(r.notes);
   return p.join(' — ');
 }
+const typeName = r => r.type === 'olio' ? (r.filter ? 'Cambio olio + filtro' : 'Cambio olio') : (TYPES[r.type] ? TYPES[r.type].label : r.type);
 function histHTML(v) {
   const list = recsOf(v.id, histFilter || null);
   const opts = `<option value="">Tutti i tipi</option>` + ORDER.map(t => `<option value="${t}" ${histFilter === t ? 'selected' : ''}>${TYPES[t].label}</option>`).join('');
   return `<div class="top"><h1>Storico</h1></div>${chipsHTML()}
     <label class="f"><select id="hf">${opts}</select></label>
-    ${list.length ? list.map(r => `<button class="card" data-act="editrec" data-id="${r.id}"><div class="item-h"><div class="ic">${TYPES[r.type].icon}</div>
-      <div class="t"><b>${TYPES[r.type].label}</b><span class="small muted">${fd(r.date)} · ${fk(r.km)} km</span>
+    ${list.length ? list.map(r => `<button class="card" data-act="editrec" data-id="${r.id}"><div class="item-h"><div class="ic">${TYPES[r.type] ? TYPES[r.type].icon : '•'}</div>
+      <div class="t"><b>${typeName(r)}</b><span class="small muted">${fd(r.date)} · ${fk(r.km)} km</span>
       ${recSub(r) ? `<span class="small muted">${esc(recSub(r))}</span>` : ''}</div></div></button>`).join('')
       : `<div class="card empty"><div class="big">🗒️</div><p class="muted">Nessun intervento registrato.</p>
         <button class="btn pri" data-act="addrec">${ico('plus')} Registra intervento</button></div>`}`;
@@ -317,7 +376,7 @@ function settingsHTML() {
       <div class="btns" style="margin-top:0"><button class="btn" data-act="exp">${ico('dl')} Esporta</button><button class="btn" data-act="imp">${ico('ul')} Importa</button></div>
       <input type="file" id="impf" accept="application/json,.json" hidden></div>
     <button class="btn dan full" data-act="wipe">${ico('trash')} Elimina tutti i dati</button>
-    <p class="small muted" style="text-align:center;margin-top:16px">Scadenze Auto e Moto · v1.0</p>`;
+    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.1</span></div>`;
 }
 
 /* ---------- sheet (finestre dal basso) ---------- */
@@ -366,7 +425,9 @@ function recForm(r, type) {
     ${field('Tipo', `<select name="type" id="rtype">${ORDER.map(k => `<option value="${k}" ${k === t ? 'selected' : ''}>${TYPES[k].label}</option>`).join('')}</select>`)}
     <div class="two">${field('Data', `<input name="date" type="date" required value="${r ? r.date : today()}" max="2100-12-31">`)}
     ${field('Km', `<input name="km" type="number" inputmode="numeric" min="0" required value="${r ? r.km : v.km}">`)}</div>
-    <div id="oilf" style="${t === 'olio' ? '' : 'display:none'}"><div class="two">
+    <div id="oilf" style="${t === 'olio' ? '' : 'display:none'}">
+      <label class="chk"><input type="checkbox" name="filter" ${!r || r.filter ? 'checked' : ''}><span>+ Cambio filtro olio</span></label>
+      <div class="two">
       ${field('Tipo olio', `<input name="oilType" placeholder="5W-30" maxlength="30" value="${esc(r?.oilType)}">`)}
       ${field('Marca', `<input name="oilBrand" placeholder="Castrol" maxlength="30" value="${esc(r?.oilBrand)}">`)}</div></div>
     ${field('Note (facoltative)', `<textarea name="notes" rows="2" maxlength="200">${esc(r?.notes)}</textarea>`)}
@@ -374,13 +435,14 @@ function recForm(r, type) {
     ${r ? `<div class="btns"><button type="button" class="btn dan" data-act="delrec" data-id="${r.id}">${ico('trash')} Elimina</button></div>` : ''}</form>`);
 }
 function ruleForm(v, type) {
-  const T = TYPES[type], old = ruleOf(v.id, type), last = lastRec(v.id, type), hasKm = T.km > 0;
-  const r = old || { everyKm: T.km || null, everyMonths: T.mo || null, remindKm: T.km ? Math.round(T.km / 15 / 100) * 100 : null, remindDays: 30 };
-  openSheet(`<h2>${T.icon} Ricorrenza: ${T.label}</h2><form data-form="rule" data-t="${type}">
+  const T = TYPES[type], old = ruleOf(v.id, type), last = lastRec(v.id, type), hasKm = T.km > 0, hasMo = !T.kmOnly;
+  const r = old || { everyKm: T.km || null, everyMonths: T.mo || null, remindKm: T.km ? Math.round(T.km / 15 / 100) * 100 : null, remindDays: hasMo ? 30 : 0 };
+  openSheet(`<h2>${T.icon} Ricorrenza: ${T.label}</h2>${T.kmOnly ? '<p class="small muted" style="margin-top:-6px">Solo a chilometri.</p>' : ''}
+    <form data-form="rule" data-t="${type}">
     ${hasKm ? `<div class="two">${field('Ogni (km)', `<input name="everyKm" type="number" inputmode="numeric" min="0" value="${r.everyKm || ''}" placeholder="15000">`)}
       ${field('Avviso km prima', `<input name="remindKm" type="number" inputmode="numeric" min="0" value="${r.remindKm ?? ''}" placeholder="1000">`)}</div>` : ''}
-    <div class="two">${field('Ogni (mesi)', `<input name="everyMonths" type="number" inputmode="numeric" min="0" value="${r.everyMonths || ''}" placeholder="12">`)}
-      ${field('Avviso giorni prima', `<input name="remindDays" type="number" inputmode="numeric" min="0" value="${r.remindDays ?? ''}" placeholder="30">`)}</div>
+    ${hasMo ? `<div class="two">${field('Ogni (mesi)', `<input name="everyMonths" type="number" inputmode="numeric" min="0" value="${r.everyMonths || ''}" placeholder="12">`)}
+      ${field('Avviso giorni prima', `<input name="remindDays" type="number" inputmode="numeric" min="0" value="${r.remindDays ?? ''}" placeholder="30">`)}</div>` : ''}
     ${last ? `<p class="small muted">Ultimo intervento: ${fd(last.date)} a ${fk(last.km)} km</p>`
       : `<p class="small muted">Nessun intervento registrato: indica l'ultimo, serve per il calcolo.</p>
         <div class="two">${field('Data ultimo', `<input name="lastDate" type="date" required value="${today()}">`)}
@@ -478,6 +540,18 @@ document.addEventListener('click', e => {
     case 'rule': ruleForm(v, d.t); break;
     case 'delrule':
       delete S.rules[v.id + ':' + d.t]; save(); closeSheet(); render(); toast('Ricorrenza rimossa'); break;
+    case 'view': S.settings.view = d.v; save(); render(); break;
+    case 'photo':
+      if (v.photo) { draft = Object.assign({ vid: v.id }, v.photo); photoSheet(); } else $('#phf').click();
+      break;
+    case 'pickphoto': $('#phf').click(); break;
+    case 'rmphoto': delete v.photo; draft = null; save(); closeSheet(); render(); toast('Foto rimossa'); break;
+    case 'savephoto': {
+      const x = S.vehicles.find(a => a.id === draft.vid), prev = x.photo;
+      x.photo = { data: draft.data, s: draft.s, tx: draft.tx, ty: draft.ty };
+      if (save()) { draft = null; closeSheet(); render(); toast('Foto salvata'); } else x.photo = prev;
+      break;
+    }
     case 'close': closeSheet(); break;
     case 'theme': S.settings.theme = d.v; save(); render(); break;
     case 'color': S.settings.color = +d.i; save(); render(); break;
@@ -525,8 +599,10 @@ document.addEventListener('submit', e => {
       n ? toast(`Km aggiornati. Attenzione: ${n} ${n === 1 ? 'scadenza superata' : 'scadenze superate'}`, 'late') : toast('Km aggiornati'); break;
     }
     case 'rec': {
+      const isOil = fdata.type === 'olio';
       const rec = { id: f.dataset.id || uid(), vid: v.id, type: fdata.type, date: fdata.date, km: Math.max(0, num(fdata.km) || 0),
-        oilType: fdata.type === 'olio' ? (fdata.oilType || '').trim() : '', oilBrand: fdata.type === 'olio' ? (fdata.oilBrand || '').trim() : '',
+        filter: isOil && !!fdata.filter,
+        oilType: isOil ? (fdata.oilType || '').trim() : '', oilBrand: isOil ? (fdata.oilBrand || '').trim() : '',
         notes: (fdata.notes || '').trim() };
       if (f.dataset.id) {
         const i = S.records.findIndex(r => r.id === rec.id); S.records[i] = rec;
@@ -538,7 +614,7 @@ document.addEventListener('submit', e => {
       const type = f.dataset.t, rule = ruleFromForm(f);
       if (!rule) { toast('Indica una ricorrenza in km o in mesi'); break; }
       if (!lastRec(v.id, type)) {
-        addRecord({ id: uid(), vid: v.id, type, date: fdata.lastDate, km: Math.max(0, num(fdata.lastKm) || 0), oilType: '', oilBrand: '', notes: 'Dato iniziale' });
+        addRecord({ id: uid(), vid: v.id, type, date: fdata.lastDate, km: Math.max(0, num(fdata.lastKm) || 0), oilType: '', oilBrand: '', filter: type === 'olio', notes: 'Dato iniziale' });
       }
       S.rules[v.id + ':' + type] = rule; save(); closeSheet(); render();
       const st = status(v, type);
@@ -548,9 +624,15 @@ document.addEventListener('submit', e => {
 });
 
 document.addEventListener('input', e => {
+  if (e.target.id === 'pz' && draft) { draft.s = e.target.value / 100; applyDraft(); return; }
   const f = e.target.closest('form[data-form=rule]'); if (f) previewRule(f);
 });
 document.addEventListener('change', e => {
+  if (e.target.id === 'phf') {
+    const file = e.target.files[0]; e.target.value = '';
+    if (file) readPhoto(file).then(data => { draft = { vid: curVeh().id, data, s: 1, tx: 0, ty: 0 }; photoSheet(); }).catch(() => toast('Immagine non valida'));
+    return;
+  }
   if (e.target.id === 'rtype') $('#oilf').style.display = e.target.value === 'olio' ? '' : 'none';
   if (e.target.id === 'hf') { histFilter = e.target.value; render(); }
   if (e.target.id === 'impf' && e.target.files[0]) {
@@ -569,6 +651,56 @@ document.addEventListener('change', e => {
 });
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !sheetOpen) { render(); notifyDue(); } });
 matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
+
+/* ---------- foto del veicolo ---------- */
+let draft = null;
+function readPhoto(file) {
+  return new Promise((res, rej) => {
+    const u = URL.createObjectURL(file), im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, 1000 / Math.max(im.width, im.height)), c = document.createElement('canvas');
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(u); res(c.toDataURL('image/jpeg', 0.78));
+    };
+    im.onerror = () => rej(new Error('img'));
+    im.src = u;
+  });
+}
+function photoSheet() {
+  openSheet(`<h2>Foto del veicolo</h2>
+    <div class="pbox" id="pbox"><img id="pimg" class="pimg" alt="" src="${draft.data}" style="${photoStyle(draft)}"></div>
+    <p class="small muted">Trascina per spostare. Pizzica o usa il cursore per ingrandire.</p>
+    <label class="f"><span>Zoom</span><input id="pz" type="range" min="100" max="400" value="${Math.round(draft.s * 100)}"></label>
+    <button class="btn pri full" data-act="savephoto">Salva</button>
+    <div class="btns"><button class="btn" data-act="pickphoto">${ico('cam')} Cambia foto</button><button class="btn dan" data-act="rmphoto">${ico('trash')} Rimuovi</button></div>`);
+}
+function applyDraft() {
+  const lim = (draft.s - 1) / 2;
+  draft.tx = Math.max(-lim, Math.min(lim, draft.tx)); draft.ty = Math.max(-lim, Math.min(lim, draft.ty));
+  const im = $('#pimg'); if (im) im.style.cssText = photoStyle(draft);
+}
+const ptr = new Map(); let pd0 = 0;
+const pinch = () => { if (ptr.size < 2) return 0; const [a, b] = [...ptr.values()]; return Math.hypot(a.x - b.x, a.y - b.y); };
+document.addEventListener('pointerdown', e => {
+  const b = e.target.closest('#pbox'); if (!b || !draft) return;
+  b.setPointerCapture && b.setPointerCapture(e.pointerId);
+  ptr.set(e.pointerId, { x: e.clientX, y: e.clientY }); pd0 = pinch();
+});
+document.addEventListener('pointermove', e => {
+  if (!draft || !ptr.has(e.pointerId)) return;
+  const b = $('#pbox'); if (!b) return;
+  const r = b.getBoundingClientRect(), prev = ptr.get(e.pointerId), cur = { x: e.clientX, y: e.clientY };
+  ptr.set(e.pointerId, cur);
+  if (ptr.size === 1) { draft.tx += (cur.x - prev.x) / r.width; draft.ty += (cur.y - prev.y) / r.height; }
+  else if (ptr.size === 2) {
+    const d = pinch();
+    if (pd0 > 0) draft.s = Math.max(1, Math.min(4, draft.s * d / pd0));
+    pd0 = d; $('#pz').value = Math.round(draft.s * 100);
+  }
+  applyDraft();
+});
+['pointerup', 'pointercancel'].forEach(n => document.addEventListener(n, e => { ptr.delete(e.pointerId); pd0 = pinch(); }));
 
 /* ---------- avvio ---------- */
 render();

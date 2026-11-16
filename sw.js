@@ -1,6 +1,6 @@
-const CACHE = 'scadenze-v1';
+const CACHE = 'smemo-v2';
 const FILES = ['./', './index.html', './style.css', './app.js', './manifest.json',
-  './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png'];
+  './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/favicon.svg'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));
