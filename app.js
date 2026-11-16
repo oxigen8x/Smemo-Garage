@@ -9,7 +9,7 @@ const COLORS = [
 const TYPES = {
   olio:          { label: 'Cambio olio e filtro',  short: 'Olio',          icon: '🛢️', km: 15000,  mo: 0, kmOnly: true },
   tagliando:     { label: 'Tagliando',             short: 'Tagliando',     icon: '🔧', km: 15000,  mo: 12 },
-  cinghia:       { label: 'Cinghia distribuzione', short: 'Cinghia',       icon: '🔗', km: 120000, mo: 60 },
+  cinghia:       { label: 'Cinghia distribuzione', short: 'Cinghia',       icon: '🔗', km: 120000, mo: 0, kmOnly: true },
   gomme:         { label: 'Cambio gomme',          short: 'Gomme',         icon: '🔄', km: 40000,  mo: 60 },
   filtroaria:    { label: 'Filtro aria',           short: 'Filtro aria',   icon: '🌬️', km: 30000,  mo: 24 },
   abitacolo:     { label: 'Filtro abitacolo',      short: 'F. abitacolo',  icon: '🍃', km: 15000,  mo: 12 },
@@ -18,7 +18,25 @@ const TYPES = {
   bollo:         { label: 'Bollo',                 short: 'Bollo',         icon: '🧾', km: 0,      mo: 12 },
   assicurazione: { label: 'Assicurazione',         short: 'Assicurazione', icon: '🛡️', km: 0,      mo: 12 }
 };
-const ORDER = Object.keys(TYPES);
+const GROUPS = [
+  { id: 'doc', label: 'Documenti', types: ['bollo', 'assicurazione', 'revisione', 'tagliando'] },
+  { id: 'mech', label: 'Meccanica', types: ['olio', 'cinghia', 'gomme', 'filtroaria', 'abitacolo', 'carburante'] }
+];
+const ORDER = GROUPS.flatMap(g => g.types);
+/* Valori standard proposti nelle ricorrenze (si puo sempre scrivere un valore a mano) */
+const PRESETS = {
+  olio:          { km: [5000, 10000, 15000, 20000, 30000] },
+  tagliando:     { km: [10000, 15000, 20000, 30000], mo: [12, 24] },
+  cinghia:       { km: [60000, 90000, 120000, 150000] },
+  gomme:         { km: [20000, 30000, 40000, 50000, 60000], mo: [36, 48, 60] },
+  filtroaria:    { km: [15000, 20000, 30000, 40000], mo: [12, 24, 36] },
+  abitacolo:     { km: [10000, 15000, 20000, 30000], mo: [12, 24] },
+  carburante:    { km: [30000, 60000, 90000], mo: [24, 36, 48, 60] },
+  revisione:     { mo: [12, 24] },
+  bollo:         { mo: [6, 12] },
+  assicurazione: { mo: [6, 12] }
+};
+const REM_KM = [500, 1000, 2000, 3000], REM_DAYS = [7, 15, 30, 60];
 const ICONS = {
   home: 'M4 11l8-7 8 7v9H4zM9 20v-6h6v6',
   hist: 'M12 7v5l3 2M3 12a9 9 0 1 0 3-6.7M3 4v4h4',
@@ -96,9 +114,12 @@ function normalize(s) {
       delete o.rules[k];
     }
   }
-  for (const k of Object.keys(o.rules)) if (k.endsWith(':olio')) {
-    const r = o.rules[k]; r.everyMonths = null; r.remindDays = 0;
-    if (!r.everyKm) delete o.rules[k];
+  for (const k of Object.keys(o.rules)) {
+    const T = TYPES[k.split(':')[1]];
+    if (T && T.kmOnly) {
+      const r = o.rules[k]; r.everyMonths = null; r.remindDays = 0;
+      if (!r.everyKm) delete o.rules[k];
+    }
   }
   return o;
 }
@@ -117,6 +138,13 @@ function recsOf(vid, type) {
     .sort((a, b) => b.date.localeCompare(a.date) || (b.km - a.km));
 }
 const lastRec = (vid, type) => recsOf(vid, type)[0] || null;
+const lastFilter = vid => recsOf(vid, 'olio').find(r => r.filter) || null;
+function oilLines(v) {
+  const o = lastRec(v.id, 'olio'), f = lastFilter(v.id);
+  if (!o) return '';
+  const l = r => `${fd(r.date)} · ${fk(r.km)} km`;
+  return `Ultimo olio: ${l(o)}<br>Ultimo filtro: ${f ? l(f) : 'mai registrato'}`;
+}
 const ruleOf = (vid, type) => S.rules[vid + ':' + type] || null;
 
 /* Calcola lo stato di una scadenza dato km attuali, ultimo intervento e ricorrenza */
@@ -312,9 +340,9 @@ function homeHTML(v) {
     <span class="ic">${a.st.level === 'late' ? '⚠️' : '🔔'}</span>
     <span><b>${esc(a.v.name)} · ${TYPES[a.type].label}</b><br>${cap(a.st.parts.filter(p => p.l === (a.st.level === 'late' ? 2 : 1)).map(p => p.txt).join(' · ') || a.st.headline)}</span></button>`).join('');
   const body = over
-    ? `<div class="tiles">${ORDER.map(t => tileHTML(v, t)).join('')}</div>`
+    ? GROUPS.map(g => `<div class="sec" style="margin-top:14px">${g.label}</div><div class="tiles">${g.types.map(t => tileHTML(v, t)).join('')}</div>`).join('')
     : `${alerts.length ? `<div class="sec">Da controllare</div><div class="alerts">${al}${alerts.length > 5 ? `<div class="muted small" style="padding:2px 4px">e altre ${alerts.length - 5}</div>` : ''}</div>` : ''}
-      <div class="sec">Scadenze di ${esc(v.name)}</div>${ORDER.map(t => itemCard(v, t)).join('')}`;
+      ${GROUPS.map(g => `<div class="sec">${g.label}</div>${g.types.map(t => itemCard(v, t)).join('')}`).join('')}`;
   return `<div class="top"><div class="brand">${logo(32)}<h1>Smemo-Garage</h1></div><button class="btn" data-act="editveh" aria-label="Modifica veicolo">${ico('edit')}</button></div>
     ${chipsHTML()}${heroHTML(v, summary)}
     <div class="seg" style="margin:14px 0 10px"><button class="${over ? '' : 'on'}" data-act="view" data-v="detail">Dettaglio</button><button class="${over ? 'on' : ''}" data-act="view" data-v="over">Panoramica</button></div>
@@ -333,7 +361,7 @@ function itemCard(v, type) {
     bar = `<div class="bar ${st.level === 'late' ? 'late' : ''}"><i style="width:${Math.round(st.progress * 100)}%"></i></div>`;
   }
   return `<button class="card" data-act="item" data-v="${v.id}" data-t="${type}"><div class="item-h"><div class="ic">${T.icon}</div>
-    <div class="t"><b>${T.label}</b><span class="small muted">${esc(sub)}</span></div>${badge}</div>${extra}${bar}</button>`;
+    <div class="t"><b>${T.label}</b><span class="small muted">${type === 'olio' && st.last ? (st.rule ? esc(cap(ruleLabel(st.rule))) + '<br>' : '') + oilLines(v) : esc(sub)}</span></div>${badge}</div>${extra}${bar}</button>`;
 }
 function recSub(r) {
   const p = [];
@@ -348,7 +376,7 @@ function recSub(r) {
 const typeName = r => r.type === 'olio' ? (r.filter ? 'Cambio olio + filtro' : 'Cambio olio') : (TYPES[r.type] ? TYPES[r.type].label : r.type);
 function histHTML(v) {
   const list = recsOf(v.id, histFilter || null);
-  const opts = `<option value="">Tutti i tipi</option>` + ORDER.map(t => `<option value="${t}" ${histFilter === t ? 'selected' : ''}>${TYPES[t].label}</option>`).join('');
+  const opts = `<option value="">Tutti i tipi</option>` + GROUPS.map(g => `<optgroup label="${g.label}">${g.types.map(t => `<option value="${t}" ${histFilter === t ? 'selected' : ''}>${TYPES[t].label}</option>`).join('')}</optgroup>`).join('');
   return `<div class="top"><h1>Storico</h1></div>${chipsHTML()}
     <label class="f"><select id="hf">${opts}</select></label>
     ${list.length ? list.map(r => `<button class="card" data-act="editrec" data-id="${r.id}"><div class="item-h"><div class="ic">${TYPES[r.type] ? TYPES[r.type].icon : '•'}</div>
@@ -376,7 +404,7 @@ function settingsHTML() {
       <div class="btns" style="margin-top:0"><button class="btn" data-act="exp">${ico('dl')} Esporta</button><button class="btn" data-act="imp">${ico('ul')} Importa</button></div>
       <input type="file" id="impf" accept="application/json,.json" hidden></div>
     <button class="btn dan full" data-act="wipe">${ico('trash')} Elimina tutti i dati</button>
-    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.1</span></div>`;
+    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.2</span></div>`;
 }
 
 /* ---------- sheet (finestre dal basso) ---------- */
@@ -422,11 +450,12 @@ function recForm(r, type) {
   const v = curVeh(), t = r ? r.type : (type || 'olio');
   openSheet(`<h2>${r ? 'Modifica intervento' : 'Registra intervento'}</h2><p class="muted small" style="margin-top:-6px">${esc(v.name)}</p>
     <form data-form="rec" data-id="${r ? r.id : ''}">
-    ${field('Tipo', `<select name="type" id="rtype">${ORDER.map(k => `<option value="${k}" ${k === t ? 'selected' : ''}>${TYPES[k].label}</option>`).join('')}</select>`)}
+    ${field('Tipo', `<select name="type" id="rtype">${GROUPS.map(g => `<optgroup label="${g.label}">${g.types.map(k => `<option value="${k}" ${k === t ? 'selected' : ''}>${TYPES[k].label}</option>`).join('')}</optgroup>`).join('')}</select>`)}
     <div class="two">${field('Data', `<input name="date" type="date" required value="${r ? r.date : today()}" max="2100-12-31">`)}
     ${field('Km', `<input name="km" type="number" inputmode="numeric" min="0" required value="${r ? r.km : v.km}">`)}</div>
     <div id="oilf" style="${t === 'olio' ? '' : 'display:none'}">
-      <label class="chk"><input type="checkbox" name="filter" ${!r || r.filter ? 'checked' : ''}><span>+ Cambio filtro olio</span></label>
+      <input type="hidden" name="filter" id="oilmode" value="${!r || r.filter ? '1' : ''}">
+      <div class="seg" id="oilseg" style="margin:0 0 12px"><button type="button" class="${!r || r.filter ? '' : 'on'}" data-act="oilmode" data-v="">Solo olio</button><button type="button" class="${!r || r.filter ? 'on' : ''}" data-act="oilmode" data-v="1">Olio + filtro</button></div>
       <div class="two">
       ${field('Tipo olio', `<input name="oilType" placeholder="5W-30" maxlength="30" value="${esc(r?.oilType)}">`)}
       ${field('Marca', `<input name="oilBrand" placeholder="Castrol" maxlength="30" value="${esc(r?.oilBrand)}">`)}</div></div>
@@ -435,15 +464,15 @@ function recForm(r, type) {
     ${r ? `<div class="btns"><button type="button" class="btn dan" data-act="delrec" data-id="${r.id}">${ico('trash')} Elimina</button></div>` : ''}</form>`);
 }
 function ruleForm(v, type) {
-  const T = TYPES[type], old = ruleOf(v.id, type), last = lastRec(v.id, type), hasKm = T.km > 0, hasMo = !T.kmOnly;
+  const T = TYPES[type], P = PRESETS[type] || {}, old = ruleOf(v.id, type), last = lastRec(v.id, type), hasKm = T.km > 0, hasMo = !T.kmOnly;
   const r = old || { everyKm: T.km || null, everyMonths: T.mo || null, remindKm: T.km ? Math.round(T.km / 15 / 100) * 100 : null, remindDays: hasMo ? 30 : 0 };
+  const chips = (name, vals, fmt) => `<div class="pre">${vals.map(x => `<button type="button" class="pc" data-act="preset" data-f="${name}" data-v="${x}">${fmt(x)}</button>`).join('')}</div>`;
+  const pf = (label, name, val, ph, vals, fmt) => `<div class="pf">${field(label, `<input name="${name}" type="number" inputmode="numeric" min="0" value="${val ?? ''}" placeholder="${ph}">`)}${chips(name, vals, fmt)}</div>`;
   openSheet(`<h2>${T.icon} Ricorrenza: ${T.label}</h2>${T.kmOnly ? '<p class="small muted" style="margin-top:-6px">Solo a chilometri.</p>' : ''}
     <form data-form="rule" data-t="${type}">
-    ${hasKm ? `<div class="two">${field('Ogni (km)', `<input name="everyKm" type="number" inputmode="numeric" min="0" value="${r.everyKm || ''}" placeholder="15000">`)}
-      ${field('Avviso km prima', `<input name="remindKm" type="number" inputmode="numeric" min="0" value="${r.remindKm ?? ''}" placeholder="1000">`)}</div>` : ''}
-    ${hasMo ? `<div class="two">${field('Ogni (mesi)', `<input name="everyMonths" type="number" inputmode="numeric" min="0" value="${r.everyMonths || ''}" placeholder="12">`)}
-      ${field('Avviso giorni prima', `<input name="remindDays" type="number" inputmode="numeric" min="0" value="${r.remindDays ?? ''}" placeholder="30">`)}</div>` : ''}
-    ${last ? `<p class="small muted">Ultimo intervento: ${fd(last.date)} a ${fk(last.km)} km</p>`
+    ${hasKm ? `<div class="sec" style="margin-top:4px">Chilometri</div>${pf('Ogni (km)', 'everyKm', r.everyKm, '15000', P.km || [], fk)}${pf('Avviso km prima', 'remindKm', r.remindKm, '1000', REM_KM, fk)}` : ''}
+    ${hasMo ? `<div class="sec" style="margin-top:4px">Tempo</div>${pf('Ogni (mesi)', 'everyMonths', r.everyMonths, '12', P.mo || [], fmonths)}${pf('Avviso giorni prima', 'remindDays', r.remindDays, '30', REM_DAYS, x => x + ' gg')}` : ''}
+    ${last ? `<p class="small muted">${type === 'olio' ? oilLines(v) : `Ultimo intervento: ${fd(last.date)} a ${fk(last.km)} km`}</p>`
       : `<p class="small muted">Nessun intervento registrato: indica l'ultimo, serve per il calcolo.</p>
         <div class="two">${field('Data ultimo', `<input name="lastDate" type="date" required value="${today()}">`)}
         ${field('Km ultimo', `<input name="lastKm" type="number" inputmode="numeric" min="0" required value="${v.km}">`)}</div>`}
@@ -460,6 +489,7 @@ function ruleFromForm(f) {
 /* Anteprima/alert in tempo reale mentre si imposta la ricorrenza */
 function previewRule(f) {
   const el = $('#prev'); if (!el || !f) return;
+  f.querySelectorAll('.pc').forEach(c => c.classList.toggle('on', f.elements[c.dataset.f].value === c.dataset.v));
   const v = curVeh(), type = f.dataset.t, rule = ruleFromForm(f);
   let last = lastRec(v.id, type);
   if (!last && f.elements.lastDate) {
@@ -484,6 +514,7 @@ function detailSheet(v, type) {
     ${p.kind === 'km' ? `${fk(p.used)} km percorsi su ${fk(st.rule.everyKm)} · ${cap(p.txt)}` : `Scadenza ${fd(p.due)} · ${cap(p.txt)}`}</div>`).join('') : '';
   openSheet(`<h2>${T.icon} ${T.label}</h2><p class="muted small" style="margin-top:-6px">${esc(v.name)} · ${fk(v.km)} km${st.rule ? ' · ' + ruleLabel(st.rule) : ''}</p>
     ${parts || '<p class="muted">Nessuna ricorrenza impostata.</p>'}
+    ${type === 'olio' && st.last ? `<div class="prev" style="margin:0 0 4px">${oilLines(v)}</div>` : ''}
     <div class="btns"><button class="btn pri" data-act="addrec" data-t="${type}">${ico('plus')} Registra</button>
       <button class="btn" data-act="rule" data-t="${type}">${ico('edit')} Ricorrenza</button></div>
     ${ev ? `<div class="btns"><a class="btn" target="_blank" rel="noopener" href="${esc(googleUrl(ev))}">${ico('cal')} Google Calendar</a>
@@ -540,6 +571,13 @@ document.addEventListener('click', e => {
     case 'rule': ruleForm(v, d.t); break;
     case 'delrule':
       delete S.rules[v.id + ':' + d.t]; save(); closeSheet(); render(); toast('Ricorrenza rimossa'); break;
+    case 'oilmode':
+      $('#oilmode').value = d.v;
+      el.parentNode.querySelectorAll('button').forEach(b => b.classList.toggle('on', b === el)); break;
+    case 'preset': {
+      const f = el.closest('form'), i = f.elements[d.f];
+      i.value = d.v; i.dispatchEvent(new Event('input', { bubbles: true })); break;
+    }
     case 'view': S.settings.view = d.v; save(); render(); break;
     case 'photo':
       if (v.photo) { draft = Object.assign({ vid: v.id }, v.photo); photoSheet(); } else $('#phf').click();
