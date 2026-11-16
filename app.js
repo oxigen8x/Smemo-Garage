@@ -39,6 +39,7 @@ const PRESETS = {
 const REM_KM = [500, 1000, 2000, 3000], REM_DAYS = [7, 15, 30, 60];
 const ICONS = {
   home: 'M4 11l8-7 8 7v9H4zM9 20v-6h6v6',
+  list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
   hist: 'M12 7v5l3 2M3 12a9 9 0 1 0 3-6.7M3 4v4h4',
   set: 'M4 7h10M18 7h2M4 17h2M10 17h10M14 5v4M6 15v4',
   plus: 'M12 5v14M5 12h14',
@@ -83,7 +84,7 @@ function fmonths(n) {
 }
 
 /* ---------- stato ---------- */
-function blank() { return { vehicles: [], records: [], rules: {}, settings: { theme: 'auto', color: 0, cur: null, view: 'detail' } }; }
+function blank() { return { vehicles: [], records: [], rules: {}, settings: { theme: 'auto', color: 0, cur: null, view: 'detail', homeLayout: 'A' } }; }
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
@@ -124,7 +125,7 @@ function normalize(s) {
   return o;
 }
 let S = load();
-let tab = 'home';
+let tab = 'garage';
 let histFilter = '';
 function save() {
   try { localStorage.setItem(KEY, JSON.stringify(S)); return true; }
@@ -293,9 +294,10 @@ function render() {
   let h = '';
   if (tab === 'set') h = settingsHTML();
   else if (!v) h = emptyHTML();
-  else h = tab === 'hist' ? histHTML(v) : homeHTML(v);
+  else h = tab === 'hist' ? histHTML(v) : tab === 'garage' ? garageHTML() : homeHTML(v);
+  document.documentElement.classList.toggle('snap', tab === 'garage' && S.settings.homeLayout === 'C' && S.vehicles.length > 1);
   const navBtn = (t, ic, l) => `<button class="${tab === t ? 'on' : ''}" data-act="tab" data-t="${t}">${ico(ic)}<span>${l}</span></button>`;
-  $('#app').innerHTML = h + `<nav class="nav"><div class="in">${navBtn('home', 'home', 'Scadenze')}
+  $('#app').innerHTML = h + `<nav class="nav"><div class="in">${navBtn('garage', 'home', 'Home')}${navBtn('home', 'list', 'Scadenze')}
     <button class="plus" data-act="addrec" aria-label="Registra intervento">${ico('plus')}</button>
     ${navBtn('hist', 'hist', 'Storico')}${navBtn('set', 'set', 'Impostazioni')}</div></nav>`;
 }
@@ -348,6 +350,30 @@ function homeHTML(v) {
     <div class="seg" style="margin:14px 0 10px"><button class="${over ? '' : 'on'}" data-act="view" data-v="detail">Dettaglio</button><button class="${over ? 'on' : ''}" data-act="view" data-v="over">Panoramica</button></div>
     ${body}`;
 }
+/* ---------- home (garage) ---------- */
+const LAYOUTS = { A: 'Colonna', B: 'Mosaico', C: 'Una per schermata' };
+function vehCounts(v) {
+  const sts = ORDER.map(t => status(v, t));
+  return { late: sts.filter(s => s.level === 'late').length, soon: sts.filter(s => s.level === 'soon').length };
+}
+function garageTile(v, i, n, lay) {
+  const { late, soon } = vehCounts(v), p = v.photo;
+  const pill = late ? `<span class="gp la">${late} ${late === 1 ? 'scaduta' : 'scadute'}${soon ? ` · ${soon} in arrivo` : ''}</span>`
+    : soon ? `<span class="gp so">${soon} in arrivo</span>` : '<span class="gp">Tutto in regola</span>';
+  const al = lay === 'C' ? allAlerts().filter(a => a.v.id === v.id).slice(0, 3)
+    .map(a => `<div class="ga">${a.st.level === 'late' ? '⚠️' : '🔔'} ${TYPES[a.type].label} · ${cap(a.st.headline)}</div>`).join('') : '';
+  return `<button class="gt ${p ? 'hasph' : ''} ${i % 2 ? 'alt' : ''}" data-act="opveh" data-id="${v.id}">${p ? `<img class="pimg" alt="" src="${p.data}" style="${photoStyle(p)}">` : ''}
+    <div class="gr"><span class="gi">${ico(v.type === 'moto' ? 'moto' : 'car')}</span><span class="small">${esc(v.plate || '')}${lay === 'C' && n > 1 ? `${v.plate ? ' · ' : ''}${i + 1}/${n}` : ''}</span></div>
+    <div class="gb"><div class="gn">${esc(v.name)}</div><div class="gk">${fk(v.km)} km</div>${al ? `<div class="gal">${al}</div>` : ''}${pill}</div></button>`;
+}
+function garageHTML() {
+  const n = S.vehicles.length, lay = S.settings.homeLayout || 'A';
+  const rows = lay === 'B' ? Math.ceil(n / 2) : n;
+  const style = lay === 'B' ? `grid-template-rows:repeat(${rows},minmax(150px,1fr))` : '';
+  return `<div class="gh"><div>${logo(58)}</div><h1>Smemo-Garage</h1><div class="small muted">${n} ${n === 1 ? 'veicolo' : 'veicoli'}</div></div>
+    <div class="gl l${lay} ${lay === 'B' && n % 2 ? 'odd' : ''}" style="${style}">${S.vehicles.map((v, i) => garageTile(v, i, n, lay)).join('')}</div>
+    <button class="gadd" data-act="addveh">${ico('plus')} Aggiungi veicolo</button>`;
+}
 function itemCard(v, type) {
   const T = TYPES[type], st = status(v, type);
   let badge, sub = '', extra = '', bar = '';
@@ -391,6 +417,7 @@ function settingsHTML() {
   const notif = 'Notification' in window ? Notification.permission : 'unsupported';
   return `<div class="top"><h1>Impostazioni</h1></div>
     <div class="sec">Tema</div><div class="seg">${seg('auto', 'Automatico')}${seg('light', 'Chiaro')}${seg('dark', 'Scuro')}</div>
+    <div class="sec">Aspetto della Home</div><div class="seg">${Object.keys(LAYOUTS).map(k => `<button class="${(st.homeLayout || 'A') === k ? 'on' : ''}" data-act="glayout" data-v="${k}">${k} · ${LAYOUTS[k]}</button>`).join('')}</div>
     <div class="sec">Colore</div><div class="sw">${COLORS.map((c, i) => `<button class="${st.color === i ? 'on' : ''}" data-act="color" data-i="${i}"
       style="background:linear-gradient(135deg,${c[0]},${c[1]})" aria-label="${c[2]}"></button>`).join('')}</div>
     <div class="sec">Promemoria</div>
@@ -404,7 +431,7 @@ function settingsHTML() {
       <div class="btns" style="margin-top:0"><button class="btn" data-act="exp">${ico('dl')} Esporta</button><button class="btn" data-act="imp">${ico('ul')} Importa</button></div>
       <input type="file" id="impf" accept="application/json,.json" hidden></div>
     <button class="btn dan full" data-act="wipe">${ico('trash')} Elimina tutti i dati</button>
-    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.2</span></div>`;
+    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.3</span></div>`;
 }
 
 /* ---------- sheet (finestre dal basso) ---------- */
@@ -547,6 +574,8 @@ document.addEventListener('click', e => {
   const d = el.dataset, v = curVeh();
   switch (d.act) {
     case 'tab': tab = d.t; render(); scrollTo(0, 0); break;
+    case 'opveh': S.settings.cur = d.id; save(); tab = 'home'; render(); scrollTo(0, 0); break;
+    case 'glayout': S.settings.homeLayout = d.v; save(); render(); break;
     case 'veh': S.settings.cur = d.id; save(); render(); break;
     case 'addveh': vehForm(null); break;
     case 'editveh': vehForm(v); break;
