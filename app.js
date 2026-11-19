@@ -321,9 +321,21 @@ function chipsHTML() {
     <button class="chip" data-act="addveh">${ico('plus')} Veicolo</button></div>`;
 }
 const slugB = b => String(b || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const logoUrls = {};
+function logoSrc(slug) {
+  if (typeof LOGOS === 'undefined' || !LOGOS[slug]) return '';
+  if (!logoUrls[slug]) {
+    try {
+      const bin = atob(LOGOS[slug]), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      logoUrls[slug] = URL.createObjectURL(new Blob([u], { type: 'image/png' }));
+    } catch (e) { logoUrls[slug] = 'data:image/png;base64,' + LOGOS[slug]; }
+  }
+  return logoUrls[slug];
+}
 function brandLogo(b, cls) {
   if (!b) return '';
-  const s = typeof LOGOS !== 'undefined' && LOGOS[slugB(b)];
+  const s = logoSrc(slugB(b));
   return s ? `<span class="bl ${cls || ''}"><img alt="${esc(b)}" src="${s}"></span>`
     : `<span class="bl ini ${cls || ''}" aria-label="${esc(b)}">${esc(b.trim()[0].toUpperCase())}</span>`;
 }
@@ -445,7 +457,7 @@ function settingsHTML() {
       <div class="btns" style="margin-top:0"><button class="btn" data-act="exp">${ico('dl')} Esporta</button><button class="btn" data-act="imp">${ico('ul')} Importa</button></div>
       <input type="file" id="impf" accept="application/json,.json" hidden></div>
     <button class="btn dan full" data-act="wipe">${ico('trash')} Elimina tutti i dati</button>
-    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.5</span></div>`;
+    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.6</span></div>`;
 }
 
 /* ---------- sheet (finestre dal basso) ---------- */
@@ -550,6 +562,7 @@ function vehForm(v) {
       ${field('Modello', `<input name="mmodel" maxlength="30" placeholder="Panda" value="${esc(v?.model)}">`)}
       ${field('Versione (facoltativa)', `<input name="mversion" maxlength="40" placeholder="1.2 69 CV" value="${esc(v?.version)}">`)}
     </div>
+    <p class="small muted" id="vnote" hidden style="margin:-4px 0 10px">Per questa marca non ho ancora i modelli: scrivili a mano, il logo resta.</p>
     <p style="margin:-2px 0 12px"><button type="button" class="lk" id="vman" data-act="vman">Non trovi il tuo? Inserisci a mano</button></p>
     <div class="two">${field('Anno immatricolazione', `<select name="year" id="vyear"></select>`)}
     ${field('Targa (facoltativa)', `<input name="plate" maxlength="12" placeholder="AB123CD" value="${esc(v?.plate)}" style="text-transform:uppercase">`)}</div>
@@ -568,8 +581,15 @@ function initPicker(v) {
   P.b = Dropdown($('#ddb'), () => pB()); P.m = Dropdown($('#ddm'), () => pM()); P.v = Dropdown($('#ddv'), () => pV());
   const yr = $('#vyear');
   const setYears = (list, sel, blank) => { yr.innerHTML = (blank ? '<option value="">—</option>' : '') + yearOpts(list, sel); yr.disabled = !list.length && !blank; };
-  const cat = () => CATALOG[P.t] || {};
-  const brandItems = () => Object.keys(cat()).sort().map(b => ({ v: b, t: b, ic: brandLogo(b) }));
+  const CAT = typeof CATALOG === 'undefined' ? { auto: {}, moto: {} } : CATALOG;
+  const cat = () => CAT[P.t] || {};
+  const brandItems = () => {
+    const seen = {}, list = [];
+    const add = b => { const k = slugB(b); if (!seen[k]) { seen[k] = 1; list.push(b); } };
+    Object.keys(cat()).forEach(add);
+    if (P.t === 'auto' && typeof BRAND_NAMES !== 'undefined') BRAND_NAMES.forEach(add);
+    return list.sort((x, y) => x.localeCompare(y, 'it')).map(b => ({ v: b, t: b, ic: brandLogo(b) }));
+  };
   const autoName = () => {
     if (P.dirty) return;
     $('#vname').value = P.man ? [f.elements.mbrand.value, f.elements.mmodel.value].filter(Boolean).join(' ') : [P.b.value, P.m.value].filter(Boolean).join(' ');
@@ -582,6 +602,10 @@ function initPicker(v) {
   function pB(keep) {
     reset(1);
     const b = P.b.value; if (!b) return;
+    if (!cat()[b]) { /* marca senza modelli in catalogo: inserimento a mano con la marca già scelta */
+      P.toggleMan(true); f.elements.mbrand.value = b; autoName();
+      $('#vnote').hidden = false; return;
+    }
     P.m.set(Object.keys(cat()[b]).sort().map(m => ({ v: m, t: m })), 'Seleziona il modello', false, keep && keep.m);
     if (P.m.value) pM(keep); autoName();
   }
@@ -606,7 +630,7 @@ function initPicker(v) {
     $('#vt').innerHTML = vtHTML(t, hid);
   };
   P.toggleMan = (on) => {
-    P.man = on; $('#pick').hidden = on; $('#man').hidden = !on;
+    P.man = on; $('#pick').hidden = on; $('#man').hidden = !on; $('#vnote').hidden = true;
     $('#vman').textContent = on ? 'Scegli dal catalogo' : 'Non trovi il tuo? Inserisci a mano';
     if (on) setYears(Array.from({ length: 45 }, (_, i) => NOW - i), v && v.year, true);
     else { reset(1); P.b.set(brandItems(), 'Seleziona la marca', false); }
@@ -939,5 +963,7 @@ document.addEventListener('pointermove', e => {
 render();
 notifyDue();
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
-  navigator.serviceWorker.register('sw.js').catch(() => { /* offline non disponibile */ });
+  const hadCtl = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadCtl && !window.__rl) { window.__rl = 1; location.reload(); } });
+  navigator.serviceWorker.register('sw.js').then(r => r.update()).catch(() => { /* offline non disponibile */ });
 }

@@ -29,3 +29,8 @@ Impostazioni > Backup > Esporta. Salva il file JSON su Drive: se cancelli i dati
 - Il logo della marca compare nell'angolo della scheda veicolo (anche con la foto) e nelle schede della Home.
 - Nessuna immagine disegnata: senza foto resta lo sfondo a gradiente.
 - `logos.js` (loghi inclusi, offline) e `catalog.js` (catalogo di ESEMPIO da completare).
+
+## Novità v1.6
+- Tutti i 184 loghi del repository vehiclespecs/brand-logos (sostituiscono i precedenti); la tendina Marca mostra tutte le marche auto. Le marche senza modelli in catalogo passano all'inserimento a mano con la marca già scelta.
+- Icona dell'app identica al logo dentro l'app.
+- Aggiornamenti più affidabili: l'app cerca prima la versione nuova in rete (cache solo offline) e si ricarica da sola quando si aggiorna.
