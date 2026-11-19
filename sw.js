@@ -1,5 +1,5 @@
-const CACHE = 'smemo-v8';
-const FILES = ['./', './index.html', './style.css', './app.js', './manifest.json',
+const CACHE = 'smemo-v9';
+const FILES = ['./', './index.html', './style.css', './app.js', './logos.js', './catalog.js', './manifest.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/favicon.svg'];
 
 self.addEventListener('install', e => {

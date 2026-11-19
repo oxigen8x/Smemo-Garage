@@ -23,3 +23,9 @@ Impostazioni > Backup > Esporta. Salva il file JSON su Drive: se cancelli i dati
 ## Novità v1.4
 - **Voci da mostrare**: in Modifica veicolo puoi attivare o disattivare ogni voce, per singolo veicolo. Le voci disattivate spariscono da Scadenze, avvisi, notifiche, calendario e registrazione; gli interventi già registrati restano nello Storico.
 - **Moto**: il filtro abitacolo non è più previsto.
+
+## Novità v1.5
+- Nuovo veicolo / modifica: tre tendine a cascata **Marca → Modello → Versione**, con il logo accanto al nome della marca (iniziale su cerchio se il logo manca). Anno, targa, km e nome (precompilato). Opzione "Inserisci a mano" per i veicoli non in catalogo.
+- Il logo della marca compare nell'angolo della scheda veicolo (anche con la foto) e nelle schede della Home.
+- Nessuna immagine disegnata: senza foto resta lo sfondo a gradiente.
+- `logos.js` (loghi inclusi, offline) e `catalog.js` (catalogo di ESEMPIO da completare).

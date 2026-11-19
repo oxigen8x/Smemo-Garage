@@ -320,11 +320,18 @@ function chipsHTML() {
     ${ico(v.type === 'moto' ? 'moto' : 'car')} ${esc(v.name)}${vehLevel(v) === 2 ? '<span class="dot"></span>' : ''}</button>`).join('')}
     <button class="chip" data-act="addveh">${ico('plus')} Veicolo</button></div>`;
 }
+const slugB = b => String(b || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+function brandLogo(b, cls) {
+  if (!b) return '';
+  const s = typeof LOGOS !== 'undefined' && LOGOS[slugB(b)];
+  return s ? `<span class="bl ${cls || ''}"><img alt="${esc(b)}" src="${s}"></span>`
+    : `<span class="bl ini ${cls || ''}" aria-label="${esc(b)}">${esc(b.trim()[0].toUpperCase())}</span>`;
+}
 const photoStyle = p => `transform:translate(${(p.tx * 100).toFixed(2)}%,${(p.ty * 100).toFixed(2)}%) scale(${p.s})`;
 function heroHTML(v, summary) {
   const p = v.photo;
   return `<div class="hero ${p ? 'hasph' : ''}">${p ? `<img class="pimg" alt="" src="${p.data}" style="${photoStyle(p)}">` : ''}
-    <div class="row"><span class="small" style="opacity:.92">${esc(v.plate || (v.type === 'moto' ? 'Moto' : 'Auto'))}</span>
+    <div class="row"><span class="small hl" style="opacity:.92">${brandLogo(v.brand, 'big')}${esc(v.plate || (v.type === 'moto' ? 'Moto' : 'Auto'))}</span>
       <button class="glass cam" data-act="photo" aria-label="Foto del veicolo">${ico('cam')}</button></div>
     <div class="km">${fk(v.km)} km</div>
     <div class="row small"><span>${summary}<br><span style="opacity:.85">${v.kmDate ? 'Aggiornato il ' + fd(v.kmDate) : ''}</span></span>
@@ -370,7 +377,7 @@ function garageTile(v, i, n, lay) {
   const al = lay === 'C' ? allAlerts().filter(a => a.v.id === v.id).slice(0, 3)
     .map(a => `<div class="ga">${a.st.level === 'late' ? '⚠️' : '🔔'} ${TYPES[a.type].label} · ${cap(a.st.headline)}</div>`).join('') : '';
   return `<button class="gt ${p ? 'hasph' : ''} ${i % 2 ? 'alt' : ''}" data-act="opveh" data-id="${v.id}">${p ? `<img class="pimg" alt="" src="${p.data}" style="${photoStyle(p)}">` : ''}
-    <div class="gr"><span class="gi">${ico(v.type === 'moto' ? 'moto' : 'car')}</span><span class="small">${esc(v.plate || '')}${lay === 'C' && n > 1 ? `${v.plate ? ' · ' : ''}${i + 1}/${n}` : ''}</span></div>
+    <div class="gr">${v.brand ? `<span class="gi lg">${brandLogo(v.brand, 'big')}</span>` : `<span class="gi">${ico(v.type === 'moto' ? 'moto' : 'car')}</span>`}<span class="small">${esc(v.plate || '')}${lay === 'C' && n > 1 ? `${v.plate ? ' · ' : ''}${i + 1}/${n}` : ''}</span></div>
     <div class="gb"><div class="gn">${esc(v.name)}</div><div class="gk">${fk(v.km)} km</div>${al ? `<div class="gal">${al}</div>` : ''}${pill}</div></button>`;
 }
 function garageHTML() {
@@ -438,7 +445,7 @@ function settingsHTML() {
       <div class="btns" style="margin-top:0"><button class="btn" data-act="exp">${ico('dl')} Esporta</button><button class="btn" data-act="imp">${ico('ul')} Importa</button></div>
       <input type="file" id="impf" accept="application/json,.json" hidden></div>
     <button class="btn dan full" data-act="wipe">${ico('trash')} Elimina tutti i dati</button>
-    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.4</span></div>`;
+    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.5</span></div>`;
 }
 
 /* ---------- sheet (finestre dal basso) ---------- */
@@ -473,17 +480,155 @@ function vtHTML(type, hidden) {
     return ts.length ? `<div class="sec" style="margin:10px 2px 6px">${g.label}</div><div class="vt">${ts.map(t => `<label class="vr"><span>${TYPES[t].label}</span><input type="checkbox" name="show" value="${t}" ${hidden.includes(t) ? '' : 'checked'}><span class="tg"></span></label>`).join('')}</div>` : '';
   }).join('');
 }
+/* ---------- scelta veicolo: tre tendine (marca > modello > versione) ---------- */
+const CHEV = '<svg class="dd-ch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>';
+function Dropdown(root, onChange) {
+  let items = [], value = '', ph = '', dis = true, act = -1, q = '';
+  root.innerHTML = '<button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false"><span class="dd-ic"></span><span class="dd-tx"></span>' + CHEV + '</button>' +
+    '<div class="dd-list" hidden><input type="text" class="dd-q" placeholder="Cerca" aria-label="Cerca" hidden><div class="dd-items" role="listbox"></div></div>';
+  const btn = root.querySelector('.dd-btn'), list = root.querySelector('.dd-list'), box = root.querySelector('.dd-items'), qi = root.querySelector('.dd-q');
+  const vis = () => items.filter(i => i.t.toLowerCase().includes(q.toLowerCase()));
+  const cur = () => items.find(i => i.v === value);
+  function paintBtn() {
+    const it = cur();
+    root.querySelector('.dd-ic').innerHTML = it && it.ic ? it.ic : '';
+    const t = root.querySelector('.dd-tx'); t.textContent = it ? it.t : ph; t.classList.toggle('ph', !it);
+    btn.disabled = dis;
+  }
+  function paintList() {
+    const v = vis();
+    box.innerHTML = v.length ? v.map((i, n) => `<div class="dd-item${i.v === value ? ' sel' : ''}${n === act ? ' act' : ''}" role="option" data-v="${esc(i.v)}">${i.ic || ''}<span>${esc(i.t)}</span></div>`).join('') : '<div class="dd-empty">Nessun risultato</div>';
+    const x = box.querySelector('.act'); if (x) x.scrollIntoView({ block: 'nearest' });
+  }
+  function open() {
+    if (dis) return;
+    document.querySelectorAll('.dd.open').forEach(d => d.dispatchEvent(new Event('close')));
+    root.classList.add('open'); list.hidden = false; btn.setAttribute('aria-expanded', 'true');
+    qi.hidden = items.length <= 8; q = ''; qi.value = '';
+    act = Math.max(0, vis().findIndex(i => i.v === value)); paintList();
+    list.scrollIntoView({ block: 'nearest' });
+    if (items.length > 8) qi.focus();
+  }
+  function close() { root.classList.remove('open'); list.hidden = true; btn.setAttribute('aria-expanded', 'false'); }
+  function pick(v) { value = v; paintBtn(); close(); btn.focus(); onChange(v); }
+  root.addEventListener('close', close);
+  btn.addEventListener('click', () => root.classList.contains('open') ? close() : open());
+  btn.addEventListener('keydown', e => { if (['ArrowDown', 'ArrowUp'].includes(e.key)) { e.preventDefault(); open(); } });
+  list.addEventListener('keydown', e => {
+    const v = vis();
+    if (e.key === 'ArrowDown') { e.preventDefault(); act = Math.min(v.length - 1, act + 1); paintList(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); act = Math.max(0, act - 1); paintList(); }
+    else if (e.key === 'Enter') { e.preventDefault(); if (v[act]) pick(v[act].v); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); btn.focus(); }
+  });
+  qi.addEventListener('input', () => { q = qi.value; act = 0; paintList(); });
+  box.addEventListener('mousedown', e => e.preventDefault());
+  box.addEventListener('click', e => { const i = e.target.closest('.dd-item'); if (i) pick(i.dataset.v); });
+  return {
+    set(its, placeholder, disabled, val) { items = its; ph = placeholder; dis = disabled; value = val && its.some(i => i.v === val) ? val : ''; close(); paintBtn(); },
+    get value() { return value; },
+    get text() { const i = cur(); return i ? i.t : ''; }
+  };
+}
+document.addEventListener('click', e => document.querySelectorAll('.dd.open').forEach(d => { if (!d.contains(e.target)) d.dispatchEvent(new Event('close')); }));
+
+let VP = null; /* stato del selettore nella scheda aperta */
+const verLab = x => x[0] + ' · ' + x[1] + '–' + (x[2] || 'oggi');
+const yearOpts = (list, sel) => list.map(y => `<option ${String(y) === String(sel) ? 'selected' : ''}>${y}</option>`).join('');
 function vehForm(v) {
+  const t = v ? v.type : 'auto';
   openSheet(`<h2>${v ? 'Modifica veicolo' : 'Nuovo veicolo'}</h2><form data-form="veh" data-id="${v ? v.id : ''}">
-    ${field('Nome', `<input name="name" required maxlength="40" placeholder="Fiat Panda" value="${esc(v?.name)}">`)}
-    <div class="two">${field('Targa (facoltativa)', `<input name="plate" maxlength="12" placeholder="AB123CD" value="${esc(v?.plate)}" style="text-transform:uppercase">`)}
-    ${field('Tipo', `<select name="type"><option value="auto" ${v?.type !== 'moto' ? 'selected' : ''}>Auto</option><option value="moto" ${v?.type === 'moto' ? 'selected' : ''}>Moto</option></select>`)}</div>
+    <div class="seg" id="vtseg" style="margin-bottom:12px"><button type="button" class="${t === 'auto' ? 'on' : ''}" data-act="vtype" data-v="auto">Auto</button><button type="button" class="${t === 'moto' ? 'on' : ''}" data-act="vtype" data-v="moto">Moto</button></div>
+    <input type="hidden" name="type" value="${t}">
+    <div id="pick">
+      <div class="fd"><span>Marca</span><div class="dd" id="ddb"></div></div>
+      <div class="fd"><span>Modello</span><div class="dd" id="ddm"></div></div>
+      <div class="fd"><span>Versione</span><div class="dd" id="ddv"></div></div>
+    </div>
+    <div id="man" hidden>
+      ${field('Marca', `<input name="mbrand" maxlength="30" placeholder="Fiat" value="${esc(v?.brand)}">`)}
+      ${field('Modello', `<input name="mmodel" maxlength="30" placeholder="Panda" value="${esc(v?.model)}">`)}
+      ${field('Versione (facoltativa)', `<input name="mversion" maxlength="40" placeholder="1.2 69 CV" value="${esc(v?.version)}">`)}
+    </div>
+    <p style="margin:-2px 0 12px"><button type="button" class="lk" id="vman" data-act="vman">Non trovi il tuo? Inserisci a mano</button></p>
+    <div class="two">${field('Anno immatricolazione', `<select name="year" id="vyear"></select>`)}
+    ${field('Targa (facoltativa)', `<input name="plate" maxlength="12" placeholder="AB123CD" value="${esc(v?.plate)}" style="text-transform:uppercase">`)}</div>
     ${field('Chilometri attuali', `<input name="km" type="number" inputmode="numeric" min="0" required value="${v ? v.km : ''}" placeholder="84320">`)}
+    ${field('Nome', `<input name="name" id="vname" required maxlength="40" placeholder="Fiat Panda" value="${esc(v?.name)}">`)}
     <div class="vh"><b>Voci da mostrare</b><button type="button" class="lk" data-act="showall">Tutte</button></div>
     <p class="small muted" style="margin:2px 0 0">Quelle disattivate spariscono da scadenze, promemoria e calendario. Lo storico resta.</p>
-    <div id="vt">${vtHTML(v ? v.type : 'auto', v ? v.hidden || [] : [])}</div>
+    <div id="vt">${vtHTML(t, v ? v.hidden || [] : [])}</div>
     <button class="btn pri full" type="submit">Salva</button>
     ${v ? `<div class="btns"><button type="button" class="btn dan" data-act="delveh">${ico('trash')} Elimina veicolo</button></div>` : ''}</form>`);
+  initPicker(v);
+}
+function initPicker(v) {
+  const f = $('form[data-form=veh]'), NOW = new Date().getFullYear();
+  const P = VP = { t: v ? v.type : 'auto', man: false, dirty: !!v, f };
+  P.b = Dropdown($('#ddb'), () => pB()); P.m = Dropdown($('#ddm'), () => pM()); P.v = Dropdown($('#ddv'), () => pV());
+  const yr = $('#vyear');
+  const setYears = (list, sel, blank) => { yr.innerHTML = (blank ? '<option value="">—</option>' : '') + yearOpts(list, sel); yr.disabled = !list.length && !blank; };
+  const cat = () => CATALOG[P.t] || {};
+  const brandItems = () => Object.keys(cat()).sort().map(b => ({ v: b, t: b, ic: brandLogo(b) }));
+  const autoName = () => {
+    if (P.dirty) return;
+    $('#vname').value = P.man ? [f.elements.mbrand.value, f.elements.mmodel.value].filter(Boolean).join(' ') : [P.b.value, P.m.value].filter(Boolean).join(' ');
+  };
+  const reset = lvl => {
+    if (lvl <= 1) P.m.set([], 'Prima scegli la marca', true);
+    if (lvl <= 2) P.v.set([], 'Prima scegli il modello', true);
+    setYears([], '');
+  };
+  function pB(keep) {
+    reset(1);
+    const b = P.b.value; if (!b) return;
+    P.m.set(Object.keys(cat()[b]).sort().map(m => ({ v: m, t: m })), 'Seleziona il modello', false, keep && keep.m);
+    if (P.m.value) pM(keep); autoName();
+  }
+  function pM(keep) {
+    reset(2);
+    const b = P.b.value, m = P.m.value; if (!m) return;
+    const vs = cat()[b][m];
+    P.v.set(vs.map((x, i) => ({ v: String(i), t: verLab(x) })), 'Seleziona la versione', false, keep && keep.vi);
+    if (P.v.value) pV(keep); autoName();
+  }
+  function pV(keep) {
+    const x = cat()[P.b.value][P.m.value][+P.v.value], ys = [];
+    for (let y = x[2] || NOW; y >= x[1]; y--) ys.push(y);
+    setYears(ys, keep && keep.y); autoName();
+  }
+  P.setType = t => {
+    P.t = t; f.elements.type.value = t;
+    f.querySelectorAll('#vtseg button').forEach(b => b.classList.toggle('on', b.dataset.v === t));
+    P.b.set(brandItems(), 'Seleziona la marca', false); reset(1);
+    if (!P.man) setYears([], '');
+    const hid = [...f.querySelectorAll('input[name=show]:not(:checked)')].map(i => i.value);
+    $('#vt').innerHTML = vtHTML(t, hid);
+  };
+  P.toggleMan = (on) => {
+    P.man = on; $('#pick').hidden = on; $('#man').hidden = !on;
+    $('#vman').textContent = on ? 'Scegli dal catalogo' : 'Non trovi il tuo? Inserisci a mano';
+    if (on) setYears(Array.from({ length: 45 }, (_, i) => NOW - i), v && v.year, true);
+    else { reset(1); P.b.set(brandItems(), 'Seleziona la marca', false); }
+  };
+  /* stato iniziale: se il veicolo ha marca/modello presenti nel catalogo uso le tendine, altrimenti inserimento manuale */
+  P.b.set(brandItems(), 'Seleziona la marca', false, v && v.brand); reset(1);
+  const inCat = v && v.brand && cat()[v.brand] && cat()[v.brand][v.model];
+  if (inCat) {
+    const vi = cat()[v.brand][v.model].findIndex(x => x[0] === v.version);
+    pB({ m: v.model, vi: vi >= 0 ? String(vi) : '', y: v.year });
+  } else if (v) P.toggleMan(true);
+  f.addEventListener('input', e => {
+    if (e.target.id === 'vname') P.dirty = true;
+    else if (P.man && /^m(brand|model)$/.test(e.target.name)) autoName();
+  });
+}
+function vehFields(f) {
+  const man = VP && VP.man, g = n => (f.elements[n] ? f.elements[n].value.trim() : '');
+  let brand, model, version;
+  if (man) { brand = g('mbrand'); model = g('mmodel'); version = g('mversion'); }
+  else if (VP && VP.b) { brand = VP.b.value; model = VP.m.value; version = VP.v.value ? VP.v.text.split(' · ')[0] : ''; }
+  return { brand: brand || '', model: model || '', version: version || '', year: num(g('year')) || null };
 }
 function kmForm(v) {
   openSheet(`<h2>Aggiorna chilometri</h2><p class="muted small" style="margin-top:-6px">${esc(v.name)}: ora ${fk(v.km)} km</p>
@@ -593,6 +738,8 @@ document.addEventListener('click', e => {
     case 'tab': tab = d.t; render(); scrollTo(0, 0); break;
     case 'opveh': S.settings.cur = d.id; save(); tab = 'home'; render(); scrollTo(0, 0); break;
     case 'glayout': S.settings.homeLayout = d.v; save(); render(); break;
+    case 'vtype': if (VP) VP.setType(d.v); break;
+    case 'vman': if (VP) VP.toggleMan(!VP.man); break;
     case 'showall': el.closest('form').querySelectorAll('input[name=show]').forEach(i => { i.checked = true; }); break;
     case 'veh': S.settings.cur = d.id; save(); render(); break;
     case 'addveh': vehForm(null); break;
@@ -660,12 +807,6 @@ document.addEventListener('click', e => {
   }
 });
 
-document.addEventListener('change', e => {
-  const s = e.target.closest('form[data-form=veh] select[name=type]'); if (!s) return;
-  const hid = [...s.form.querySelectorAll('input[name=show]:not(:checked)')].map(i => i.value);
-  $('#vt').innerHTML = vtHTML(s.value, hid);
-});
-
 document.addEventListener('submit', e => {
   const f = e.target.closest('form[data-form]'); if (!f) return;
   e.preventDefault();
@@ -676,10 +817,10 @@ document.addEventListener('submit', e => {
       const hidden = [...f.querySelectorAll('input[name=show]:not(:checked)')].map(i => i.value);
       if (f.dataset.id) {
         const x = S.vehicles.find(a => a.id === f.dataset.id);
-        Object.assign(x, { name: fdata.name.trim(), plate: fdata.plate.trim().toUpperCase(), type: fdata.type, hidden });
+        Object.assign(x, { name: fdata.name.trim(), plate: fdata.plate.trim().toUpperCase(), type: fdata.type, hidden }, vehFields(f));
         if (km !== x.km) { x.km = km; x.kmDate = today(); }
       } else {
-        const x = { id: uid(), name: fdata.name.trim(), plate: fdata.plate.trim().toUpperCase(), type: fdata.type, km, kmDate: today(), hidden };
+        const x = { id: uid(), name: fdata.name.trim(), plate: fdata.plate.trim().toUpperCase(), type: fdata.type, km, kmDate: today(), hidden, ...vehFields(f) };
         S.vehicles.push(x); S.settings.cur = x.id;
       }
       save(); closeSheet(); render(); toast('Veicolo salvato'); break;
