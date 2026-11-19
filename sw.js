@@ -1,4 +1,4 @@
-const CACHE = 'smemo-v4';
+const CACHE = 'smemo-v8';
 const FILES = ['./', './index.html', './style.css', './app.js', './manifest.json',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/favicon.svg'];
 

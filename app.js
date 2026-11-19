@@ -23,6 +23,12 @@ const GROUPS = [
   { id: 'mech', label: 'Meccanica', types: ['olio', 'cinghia', 'gomme', 'filtroaria', 'abitacolo', 'carburante'] }
 ];
 const ORDER = GROUPS.flatMap(g => g.types);
+/* voci non previste per tipo di veicolo, e voci nascoste dall'utente (v.hidden) */
+const NOT_FOR = { moto: ['abitacolo'] };
+const availFor = type => ORDER.filter(t => !(NOT_FOR[type] || []).includes(t));
+const typesOf = v => availFor(v.type).filter(t => !(v.hidden || []).includes(t));
+const groupsOf = (v, extra) => GROUPS.map(g => ({ id: g.id, label: g.label, types: g.types.filter(t => typesOf(v).includes(t) || t === extra) })).filter(g => g.types.length);
+const histGroups = v => GROUPS.map(g => ({ id: g.id, label: g.label, types: g.types.filter(t => availFor(v.type).includes(t) || S.records.some(r => r.vid === v.id && r.type === t)) })).filter(g => g.types.length);
 /* Valori standard proposti nelle ricorrenze (si puo sempre scrivere un valore a mano) */
 const PRESETS = {
   olio:          { km: [5000, 10000, 15000, 20000, 30000] },
@@ -122,6 +128,7 @@ function normalize(s) {
       if (!r.everyKm) delete o.rules[k];
     }
   }
+  o.vehicles.forEach(v => { if (!Array.isArray(v.hidden)) v.hidden = []; });
   return o;
 }
 let S = load();
@@ -180,7 +187,7 @@ function status(v, type) {
 }
 function allAlerts() {
   const out = [];
-  for (const v of S.vehicles) for (const type of ORDER) {
+  for (const v of S.vehicles) for (const type of typesOf(v)) {
     const st = status(v, type);
     if (st.level === 'late' || st.level === 'soon') out.push({ v, type, st });
   }
@@ -188,7 +195,7 @@ function allAlerts() {
 }
 const vehLevel = v => {
   let lv = 0;
-  for (const t of ORDER) { const l = status(v, t).level; if (l === 'late') return 2; if (l === 'soon') lv = 1; }
+  for (const t of typesOf(v)) { const l = status(v, t).level; if (l === 'late') return 2; if (l === 'soon') lv = 1; }
   return lv;
 };
 function ruleLabel(r) {
@@ -331,7 +338,7 @@ function tileHTML(v, type) {
   return `<button class="tile" data-act="item" data-v="${v.id}" data-t="${type}"><b><span class="bd ${cls}"></span>${T.short}</b><span class="tx ${cls}">${txt}</span></button>`;
 }
 function homeHTML(v) {
-  const sts = ORDER.map(t => status(v, t));
+  const sts = typesOf(v).map(t => status(v, t));
   const late = sts.filter(s => s.level === 'late').length, soon = sts.filter(s => s.level === 'soon').length;
   const summary = late || soon
     ? [late ? `${late} ${late === 1 ? 'scaduta' : 'scadute'}` : '', soon ? `${soon} in arrivo` : ''].filter(Boolean).join(' · ')
@@ -342,18 +349,18 @@ function homeHTML(v) {
     <span class="ic">${a.st.level === 'late' ? '⚠️' : '🔔'}</span>
     <span><b>${esc(a.v.name)} · ${TYPES[a.type].label}</b><br>${cap(a.st.parts.filter(p => p.l === (a.st.level === 'late' ? 2 : 1)).map(p => p.txt).join(' · ') || a.st.headline)}</span></button>`).join('');
   const body = over
-    ? GROUPS.map(g => `<div class="sec" style="margin-top:14px">${g.label}</div><div class="tiles">${g.types.map(t => tileHTML(v, t)).join('')}</div>`).join('')
+    ? groupsOf(v).map(g => `<div class="sec" style="margin-top:14px">${g.label}</div><div class="tiles">${g.types.map(t => tileHTML(v, t)).join('')}</div>`).join('')
     : `${alerts.length ? `<div class="sec">Da controllare</div><div class="alerts">${al}${alerts.length > 5 ? `<div class="muted small" style="padding:2px 4px">e altre ${alerts.length - 5}</div>` : ''}</div>` : ''}
-      ${GROUPS.map(g => `<div class="sec">${g.label}</div>${g.types.map(t => itemCard(v, t)).join('')}`).join('')}`;
+      ${groupsOf(v).map(g => `<div class="sec">${g.label}</div>${g.types.map(t => itemCard(v, t)).join('')}`).join('')}`;
   return `<div class="top"><div class="brand">${logo(32)}<h1>Smemo-Garage</h1></div><button class="btn" data-act="editveh" aria-label="Modifica veicolo">${ico('edit')}</button></div>
     ${chipsHTML()}${heroHTML(v, summary)}
     <div class="seg" style="margin:14px 0 10px"><button class="${over ? '' : 'on'}" data-act="view" data-v="detail">Dettaglio</button><button class="${over ? 'on' : ''}" data-act="view" data-v="over">Panoramica</button></div>
-    ${body}`;
+    ${typesOf(v).length ? body : `<div class="card empty"><p class="muted">Nessuna voce attiva per questo veicolo.</p><button class="btn pri" data-act="editveh">${ico('edit')} Scegli le voci</button></div>`}`;
 }
 /* ---------- home (garage) ---------- */
 const LAYOUTS = { A: 'Colonna', B: 'Mosaico', C: 'Una per schermata' };
 function vehCounts(v) {
-  const sts = ORDER.map(t => status(v, t));
+  const sts = typesOf(v).map(t => status(v, t));
   return { late: sts.filter(s => s.level === 'late').length, soon: sts.filter(s => s.level === 'soon').length };
 }
 function garageTile(v, i, n, lay) {
@@ -402,7 +409,7 @@ function recSub(r) {
 const typeName = r => r.type === 'olio' ? (r.filter ? 'Cambio olio + filtro' : 'Cambio olio') : (TYPES[r.type] ? TYPES[r.type].label : r.type);
 function histHTML(v) {
   const list = recsOf(v.id, histFilter || null);
-  const opts = `<option value="">Tutti i tipi</option>` + GROUPS.map(g => `<optgroup label="${g.label}">${g.types.map(t => `<option value="${t}" ${histFilter === t ? 'selected' : ''}>${TYPES[t].label}</option>`).join('')}</optgroup>`).join('');
+  const opts = `<option value="">Tutti i tipi</option>` + histGroups(v).map(g => `<optgroup label="${g.label}">${g.types.map(t => `<option value="${t}" ${histFilter === t ? 'selected' : ''}>${TYPES[t].label}</option>`).join('')}</optgroup>`).join('');
   return `<div class="top"><h1>Storico</h1></div>${chipsHTML()}
     <label class="f"><select id="hf">${opts}</select></label>
     ${list.length ? list.map(r => `<button class="card" data-act="editrec" data-id="${r.id}"><div class="item-h"><div class="ic">${TYPES[r.type] ? TYPES[r.type].icon : '•'}</div>
@@ -431,7 +438,7 @@ function settingsHTML() {
       <div class="btns" style="margin-top:0"><button class="btn" data-act="exp">${ico('dl')} Esporta</button><button class="btn" data-act="imp">${ico('ul')} Importa</button></div>
       <input type="file" id="impf" accept="application/json,.json" hidden></div>
     <button class="btn dan full" data-act="wipe">${ico('trash')} Elimina tutti i dati</button>
-    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.3</span></div>`;
+    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.4</span></div>`;
 }
 
 /* ---------- sheet (finestre dal basso) ---------- */
@@ -459,12 +466,22 @@ function toast(msg, cls) {
 }
 const field = (label, inner) => `<label class="f"><span>${label}</span>${inner}</label>`;
 
+function vtHTML(type, hidden) {
+  const av = availFor(type);
+  return GROUPS.map(g => {
+    const ts = g.types.filter(t => av.includes(t));
+    return ts.length ? `<div class="sec" style="margin:10px 2px 6px">${g.label}</div><div class="vt">${ts.map(t => `<label class="vr"><span>${TYPES[t].label}</span><input type="checkbox" name="show" value="${t}" ${hidden.includes(t) ? '' : 'checked'}><span class="tg"></span></label>`).join('')}</div>` : '';
+  }).join('');
+}
 function vehForm(v) {
   openSheet(`<h2>${v ? 'Modifica veicolo' : 'Nuovo veicolo'}</h2><form data-form="veh" data-id="${v ? v.id : ''}">
     ${field('Nome', `<input name="name" required maxlength="40" placeholder="Fiat Panda" value="${esc(v?.name)}">`)}
     <div class="two">${field('Targa (facoltativa)', `<input name="plate" maxlength="12" placeholder="AB123CD" value="${esc(v?.plate)}" style="text-transform:uppercase">`)}
     ${field('Tipo', `<select name="type"><option value="auto" ${v?.type !== 'moto' ? 'selected' : ''}>Auto</option><option value="moto" ${v?.type === 'moto' ? 'selected' : ''}>Moto</option></select>`)}</div>
     ${field('Chilometri attuali', `<input name="km" type="number" inputmode="numeric" min="0" required value="${v ? v.km : ''}" placeholder="84320">`)}
+    <div class="vh"><b>Voci da mostrare</b><button type="button" class="lk" data-act="showall">Tutte</button></div>
+    <p class="small muted" style="margin:2px 0 0">Quelle disattivate spariscono da scadenze, promemoria e calendario. Lo storico resta.</p>
+    <div id="vt">${vtHTML(v ? v.type : 'auto', v ? v.hidden || [] : [])}</div>
     <button class="btn pri full" type="submit">Salva</button>
     ${v ? `<div class="btns"><button type="button" class="btn dan" data-act="delveh">${ico('trash')} Elimina veicolo</button></div>` : ''}</form>`);
 }
@@ -477,7 +494,7 @@ function recForm(r, type) {
   const v = curVeh(), t = r ? r.type : (type || 'olio');
   openSheet(`<h2>${r ? 'Modifica intervento' : 'Registra intervento'}</h2><p class="muted small" style="margin-top:-6px">${esc(v.name)}</p>
     <form data-form="rec" data-id="${r ? r.id : ''}">
-    ${field('Tipo', `<select name="type" id="rtype">${GROUPS.map(g => `<optgroup label="${g.label}">${g.types.map(k => `<option value="${k}" ${k === t ? 'selected' : ''}>${TYPES[k].label}</option>`).join('')}</optgroup>`).join('')}</select>`)}
+    ${field('Tipo', `<select name="type" id="rtype">${groupsOf(v, r ? r.type : null).map(g => `<optgroup label="${g.label}">${g.types.map(k => `<option value="${k}" ${k === t ? 'selected' : ''}>${TYPES[k].label}</option>`).join('')}</optgroup>`).join('')}</select>`)}
     <div class="two">${field('Data', `<input name="date" type="date" required value="${r ? r.date : today()}" max="2100-12-31">`)}
     ${field('Km', `<input name="km" type="number" inputmode="numeric" min="0" required value="${r ? r.km : v.km}">`)}</div>
     <div id="oilf" style="${t === 'olio' ? '' : 'display:none'}">
@@ -576,6 +593,7 @@ document.addEventListener('click', e => {
     case 'tab': tab = d.t; render(); scrollTo(0, 0); break;
     case 'opveh': S.settings.cur = d.id; save(); tab = 'home'; render(); scrollTo(0, 0); break;
     case 'glayout': S.settings.homeLayout = d.v; save(); render(); break;
+    case 'showall': el.closest('form').querySelectorAll('input[name=show]').forEach(i => { i.checked = true; }); break;
     case 'veh': S.settings.cur = d.id; save(); render(); break;
     case 'addveh': vehForm(null); break;
     case 'editveh': vehForm(v); break;
@@ -629,7 +647,7 @@ document.addEventListener('click', e => {
       download(`${TYPES[d.t].label}-${v.name}.ics`.replace(/\s+/g, '_'), 'text/calendar', buildIcs([ev])); break;
     }
     case 'icsall': {
-      const evs = ORDER.map(t => eventFor(v, t)).filter(Boolean);
+      const evs = typesOf(v).map(t => eventFor(v, t)).filter(Boolean);
       if (!evs.length) { toast('Nessuna scadenza da esportare: imposta almeno una ricorrenza'); break; }
       download(`scadenze-${v.name}.ics`.replace(/\s+/g, '_'), 'text/calendar', buildIcs(evs)); toast(`${evs.length} eventi esportati`); break;
     }
@@ -642,6 +660,12 @@ document.addEventListener('click', e => {
   }
 });
 
+document.addEventListener('change', e => {
+  const s = e.target.closest('form[data-form=veh] select[name=type]'); if (!s) return;
+  const hid = [...s.form.querySelectorAll('input[name=show]:not(:checked)')].map(i => i.value);
+  $('#vt').innerHTML = vtHTML(s.value, hid);
+});
+
 document.addEventListener('submit', e => {
   const f = e.target.closest('form[data-form]'); if (!f) return;
   e.preventDefault();
@@ -649,12 +673,13 @@ document.addEventListener('submit', e => {
   switch (f.dataset.form) {
     case 'veh': {
       const km = Math.max(0, num(fdata.km) || 0);
+      const hidden = [...f.querySelectorAll('input[name=show]:not(:checked)')].map(i => i.value);
       if (f.dataset.id) {
         const x = S.vehicles.find(a => a.id === f.dataset.id);
-        Object.assign(x, { name: fdata.name.trim(), plate: fdata.plate.trim().toUpperCase(), type: fdata.type });
+        Object.assign(x, { name: fdata.name.trim(), plate: fdata.plate.trim().toUpperCase(), type: fdata.type, hidden });
         if (km !== x.km) { x.km = km; x.kmDate = today(); }
       } else {
-        const x = { id: uid(), name: fdata.name.trim(), plate: fdata.plate.trim().toUpperCase(), type: fdata.type, km, kmDate: today() };
+        const x = { id: uid(), name: fdata.name.trim(), plate: fdata.plate.trim().toUpperCase(), type: fdata.type, km, kmDate: today(), hidden };
         S.vehicles.push(x); S.settings.cur = x.id;
       }
       save(); closeSheet(); render(); toast('Veicolo salvato'); break;
