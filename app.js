@@ -277,13 +277,7 @@ function download(name, mime, text) {
 }
 
 /* ---------- tema ---------- */
-const LOGO_MARK = '<path d="M16 60V35L40 18l24 17v25z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/><path d="M27 44h26M27 50h26M27 56h26" stroke="#fff" stroke-width="3" stroke-linecap="round"/>';
-const logo = s => `<svg class="logo" width="${s}" height="${s}" viewBox="0 0 80 80" aria-hidden="true"><rect width="80" height="80" rx="18" fill="url(#lg)"/>${LOGO_MARK}</svg>`;
-function setFavicon(c) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c[0]}"/><stop offset="1" stop-color="${c[1]}"/></linearGradient></defs><rect width="80" height="80" rx="18" fill="url(#g)"/>${LOGO_MARK}</svg>`;
-  const l = document.querySelector('link[rel=icon]');
-  if (l) { l.type = 'image/svg+xml'; l.href = 'data:image/svg+xml,' + encodeURIComponent(svg); }
-}
+const logo = s => `<img class="logo" src="icons/icon-${s > 64 ? 512 : 192}.png" width="${s}" height="${s}" alt="">`;
 function applyTheme() {
   const st = S.settings, c = COLORS[st.color] || COLORS[0], r = document.documentElement;
   r.dataset.theme = st.theme;
@@ -291,7 +285,6 @@ function applyTheme() {
   const dark = st.theme === 'dark' || (st.theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
   const m = document.querySelector('meta[name=theme-color]');
   if (m) m.content = dark ? '#0e0f1e' : '#f3f4fb';
-  setFavicon(c);
 }
 
 /* ---------- viste ---------- */
@@ -449,7 +442,7 @@ function settingsHTML() {
       <input type="file" id="impf" accept="application/json,.json" hidden></div>
     <button class="btn dan full" data-act="wipe">${ico('trash')} Elimina tutti i dati</button>
     <p class="small muted" style="text-align:center;margin:14px 8px 0">Catalogo auto: gor3a/vehicle-makes-models (licenza ODbL 1.0). Loghi: marchi dei rispettivi proprietari, usati per identificare il veicolo.</p>
-    <div class="brand" style="justify-content:center;margin-top:12px">${logo(22)}<span class="small muted">Smemo-Garage · v1.8</span></div>`;
+    <div class="brand" style="justify-content:center;margin-top:12px">${logo(22)}<span class="small muted">Smemo-Garage · v1.9</span></div>`;
 }
 
 /* ---------- sheet (finestre dal basso) ---------- */

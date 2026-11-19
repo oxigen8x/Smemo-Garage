@@ -1,6 +1,6 @@
-const CACHE = 'smemo-v12';
+const CACHE = 'smemo-v13';
 const FILES = ['./', './index.html', './style.css', './app.js', './logos.js', './catalog.js', './manifest.json',
-  './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/favicon.svg'];
+  './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png', './icons/apple-touch-icon.png', './icons/favicon-48.png'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)).then(() => self.skipWaiting()));

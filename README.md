@@ -45,3 +45,6 @@ Impostazioni > Backup > Esporta. Salva il file JSON su Drive: se cancelli i dati
 - Via le icone auto/moto disegnate: al loro posto il logo della marca (badge, scheda veicolo, Home). Senza marca, solo il nome.
 - Loghi incorporati come data URI (compatibili anche con visualizzatori con CSP restrittiva).
 - Ricerca nelle tendine: prima i risultati che iniziano con il testo digitato.
+
+## Novità v1.9
+- Nuova icona e logo (metallo blu con garage e auto) per icona dell'app, icona adattiva Android, favicon e logo nell'app. Il logo non cambia più con il colore del tema.
