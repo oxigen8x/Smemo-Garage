@@ -442,7 +442,7 @@ function settingsHTML() {
       <input type="file" id="impf" accept="application/json,.json" hidden></div>
     <button class="btn dan full" data-act="wipe">${ico('trash')} Elimina tutti i dati</button>
     <p class="small muted" style="text-align:center;margin:14px 8px 0">Catalogo auto: gor3a/vehicle-makes-models (licenza ODbL 1.0). Loghi: marchi dei rispettivi proprietari, usati per identificare il veicolo.</p>
-    <div class="brand" style="justify-content:center;margin-top:12px">${logo(22)}<span class="small muted">Smemo-Garage · v1.9</span></div>`;
+    <div class="brand" style="justify-content:center;margin-top:12px">${logo(22)}<span class="small muted">Smemo-Garage · v1.9.1</span></div>`;
 }
 
 /* ---------- sheet (finestre dal basso) ---------- */

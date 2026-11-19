@@ -48,3 +48,6 @@ Impostazioni > Backup > Esporta. Salva il file JSON su Drive: se cancelli i dati
 
 ## Novità v1.9
 - Nuova icona e logo (metallo blu con garage e auto) per icona dell'app, icona adattiva Android, favicon e logo nell'app. Il logo non cambia più con il colore del tema.
+
+## v1.9.1
+- Logo Norton sostituito con quello fornito (scritta bianca su cerchio nero).
