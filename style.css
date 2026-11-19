@@ -221,3 +221,7 @@ html.snap{scroll-snap-type:y proximity}
 .dd-item.sel{font-weight:600}
 .dd-item.sel::after{content:"✓";margin-left:auto;color:var(--a1)}
 .dd-empty{padding:12px;color:var(--tx2);font-size:14px}
+
+.bl.sm{width:24px;height:24px;border-radius:7px}
+.chip .bl{margin-left:-4px}
+.chip.on .bl{border:0}

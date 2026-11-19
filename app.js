@@ -317,21 +317,12 @@ function emptyHTML() {
 function chipsHTML() {
   const cur = curVeh();
   return `<div class="chips">${S.vehicles.map(v => `<button class="chip ${v.id === cur.id ? 'on' : ''}" data-act="veh" data-id="${v.id}">
-    ${ico(v.type === 'moto' ? 'moto' : 'car')} ${esc(v.name)}${vehLevel(v) === 2 ? '<span class="dot"></span>' : ''}</button>`).join('')}
+    ${brandLogo(v.brand, 'sm')}${esc(v.name)}${vehLevel(v) === 2 ? '<span class="dot"></span>' : ''}</button>`).join('')}
     <button class="chip" data-act="addveh">${ico('plus')} Veicolo</button></div>`;
 }
 const slugB = b => String(b || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-const logoUrls = {};
 function logoSrc(slug) {
-  if (typeof LOGOS === 'undefined' || !LOGOS[slug]) return '';
-  if (!logoUrls[slug]) {
-    try {
-      const bin = atob(LOGOS[slug]), u = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-      logoUrls[slug] = URL.createObjectURL(new Blob([u], { type: 'image/png' }));
-    } catch (e) { logoUrls[slug] = 'data:image/png;base64,' + LOGOS[slug]; }
-  }
-  return logoUrls[slug];
+  return typeof LOGOS !== 'undefined' && LOGOS[slug] ? 'data:image/png;base64,' + LOGOS[slug] : '';
 }
 function brandLogo(b, cls) {
   if (!b) return '';
@@ -389,7 +380,7 @@ function garageTile(v, i, n, lay) {
   const al = lay === 'C' ? allAlerts().filter(a => a.v.id === v.id).slice(0, 3)
     .map(a => `<div class="ga">${a.st.level === 'late' ? '⚠️' : '🔔'} ${TYPES[a.type].label} · ${cap(a.st.headline)}</div>`).join('') : '';
   return `<button class="gt ${p ? 'hasph' : ''} ${i % 2 ? 'alt' : ''}" data-act="opveh" data-id="${v.id}">${p ? `<img class="pimg" alt="" src="${p.data}" style="${photoStyle(p)}">` : ''}
-    <div class="gr">${v.brand ? `<span class="gi lg">${brandLogo(v.brand, 'big')}</span>` : `<span class="gi">${ico(v.type === 'moto' ? 'moto' : 'car')}</span>`}<span class="small">${esc(v.plate || '')}${lay === 'C' && n > 1 ? `${v.plate ? ' · ' : ''}${i + 1}/${n}` : ''}</span></div>
+    <div class="gr">${v.brand ? `<span class="gi lg">${brandLogo(v.brand, 'big')}</span>` : '<span></span>'}<span class="small">${esc(v.plate || '')}${lay === 'C' && n > 1 ? `${v.plate ? ' · ' : ''}${i + 1}/${n}` : ''}</span></div>
     <div class="gb"><div class="gn">${esc(v.name)}</div><div class="gk">${fk(v.km)} km</div>${al ? `<div class="gal">${al}</div>` : ''}${pill}</div></button>`;
 }
 function garageHTML() {
@@ -457,7 +448,8 @@ function settingsHTML() {
       <div class="btns" style="margin-top:0"><button class="btn" data-act="exp">${ico('dl')} Esporta</button><button class="btn" data-act="imp">${ico('ul')} Importa</button></div>
       <input type="file" id="impf" accept="application/json,.json" hidden></div>
     <button class="btn dan full" data-act="wipe">${ico('trash')} Elimina tutti i dati</button>
-    <div class="brand" style="justify-content:center;margin-top:18px">${logo(22)}<span class="small muted">Smemo-Garage · v1.6</span></div>`;
+    <p class="small muted" style="text-align:center;margin:14px 8px 0">Catalogo auto: gor3a/vehicle-makes-models (licenza ODbL 1.0). Loghi: marchi dei rispettivi proprietari, usati per identificare il veicolo.</p>
+    <div class="brand" style="justify-content:center;margin-top:12px">${logo(22)}<span class="small muted">Smemo-Garage · v1.8</span></div>`;
 }
 
 /* ---------- sheet (finestre dal basso) ---------- */
@@ -499,7 +491,12 @@ function Dropdown(root, onChange) {
   root.innerHTML = '<button type="button" class="dd-btn" aria-haspopup="listbox" aria-expanded="false"><span class="dd-ic"></span><span class="dd-tx"></span>' + CHEV + '</button>' +
     '<div class="dd-list" hidden><input type="text" class="dd-q" placeholder="Cerca" aria-label="Cerca" hidden><div class="dd-items" role="listbox"></div></div>';
   const btn = root.querySelector('.dd-btn'), list = root.querySelector('.dd-list'), box = root.querySelector('.dd-items'), qi = root.querySelector('.dd-q');
-  const vis = () => items.filter(i => i.t.toLowerCase().includes(q.toLowerCase()));
+  const vis = () => {
+    const s = q.toLowerCase().trim(); if (!s) return items;
+    const w = t => t.toLowerCase().split(/[\s\-]+/).some(x => x.startsWith(s));
+    const rank = i => i.t.toLowerCase().startsWith(s) ? 0 : w(i.t) ? 1 : 2;
+    return items.filter(i => i.t.toLowerCase().includes(s)).sort((x, y) => rank(x) - rank(y));
+  };
   const cur = () => items.find(i => i.v === value);
   function paintBtn() {
     const it = cur();
@@ -554,15 +551,19 @@ function vehForm(v) {
     <input type="hidden" name="type" value="${t}">
     <div id="pick">
       <div class="fd"><span>Marca</span><div class="dd" id="ddb"></div></div>
-      <div class="fd"><span>Modello</span><div class="dd" id="ddm"></div></div>
-      <div class="fd"><span>Versione</span><div class="dd" id="ddv"></div></div>
+      <div class="fd" id="fdm"><span>Modello</span><div class="dd" id="ddm"></div></div>
+      <div class="fd" id="fdv"><span>Versione</span><div class="dd" id="ddv"></div></div>
+      <div id="free" hidden>
+        ${field('Modello', `<input name="fmodel" maxlength="30" placeholder="Panda" value="${esc(v?.model)}">`)}
+        ${field('Versione (facoltativa)', `<input name="fversion" maxlength="40" placeholder="1.2 69 CV" value="${esc(v?.version)}">`)}
+        <p class="small muted" style="margin:-4px 0 10px">Per questa marca non ho ancora i modelli: scrivili qui.</p>
+      </div>
     </div>
     <div id="man" hidden>
       ${field('Marca', `<input name="mbrand" maxlength="30" placeholder="Fiat" value="${esc(v?.brand)}">`)}
       ${field('Modello', `<input name="mmodel" maxlength="30" placeholder="Panda" value="${esc(v?.model)}">`)}
       ${field('Versione (facoltativa)', `<input name="mversion" maxlength="40" placeholder="1.2 69 CV" value="${esc(v?.version)}">`)}
     </div>
-    <p class="small muted" id="vnote" hidden style="margin:-4px 0 10px">Per questa marca non ho ancora i modelli: scrivili a mano, il logo resta.</p>
     <p style="margin:-2px 0 12px"><button type="button" class="lk" id="vman" data-act="vman">Non trovi il tuo? Inserisci a mano</button></p>
     <div class="two">${field('Anno immatricolazione', `<select name="year" id="vyear"></select>`)}
     ${field('Targa (facoltativa)', `<input name="plate" maxlength="12" placeholder="AB123CD" value="${esc(v?.plate)}" style="text-transform:uppercase">`)}</div>
@@ -588,11 +589,12 @@ function initPicker(v) {
     const add = b => { const k = slugB(b); if (!seen[k]) { seen[k] = 1; list.push(b); } };
     Object.keys(cat()).forEach(add);
     if (P.t === 'auto' && typeof BRAND_NAMES !== 'undefined') BRAND_NAMES.forEach(add);
+    if (P.t === 'moto' && typeof MOTO_BRANDS !== 'undefined') MOTO_BRANDS.forEach(add);
     return list.sort((x, y) => x.localeCompare(y, 'it')).map(b => ({ v: b, t: b, ic: brandLogo(b) }));
   };
   const autoName = () => {
     if (P.dirty) return;
-    $('#vname').value = P.man ? [f.elements.mbrand.value, f.elements.mmodel.value].filter(Boolean).join(' ') : [P.b.value, P.m.value].filter(Boolean).join(' ');
+    $('#vname').value = P.man ? [f.elements.mbrand.value, f.elements.mmodel.value].filter(Boolean).join(' ') : [P.b.value, P.free ? f.elements.fmodel.value : P.m.value].filter(Boolean).join(' ');
   };
   const reset = lvl => {
     if (lvl <= 1) P.m.set([], 'Prima scegli la marca', true);
@@ -602,10 +604,8 @@ function initPicker(v) {
   function pB(keep) {
     reset(1);
     const b = P.b.value; if (!b) return;
-    if (!cat()[b]) { /* marca senza modelli in catalogo: inserimento a mano con la marca già scelta */
-      P.toggleMan(true); f.elements.mbrand.value = b; autoName();
-      $('#vnote').hidden = false; return;
-    }
+    P.free = !cat()[b]; $('#fdm').hidden = $('#fdv').hidden = P.free; $('#free').hidden = !P.free;
+    if (P.free) { setYears(Array.from({ length: 45 }, (_, i) => NOW - i), v && v.year, true); autoName(); return; }
     P.m.set(Object.keys(cat()[b]).sort().map(m => ({ v: m, t: m })), 'Seleziona il modello', false, keep && keep.m);
     if (P.m.value) pM(keep); autoName();
   }
@@ -622,6 +622,7 @@ function initPicker(v) {
     setYears(ys, keep && keep.y); autoName();
   }
   P.setType = t => {
+    P.free = false; $('#free').hidden = true; $('#fdm').hidden = $('#fdv').hidden = false;
     P.t = t; f.elements.type.value = t;
     f.querySelectorAll('#vtseg button').forEach(b => b.classList.toggle('on', b.dataset.v === t));
     P.b.set(brandItems(), 'Seleziona la marca', false); reset(1);
@@ -630,7 +631,7 @@ function initPicker(v) {
     $('#vt').innerHTML = vtHTML(t, hid);
   };
   P.toggleMan = (on) => {
-    P.man = on; $('#pick').hidden = on; $('#man').hidden = !on; $('#vnote').hidden = true;
+    P.man = on; $('#pick').hidden = on; $('#man').hidden = !on; $('#free').hidden = true; $('#fdm').hidden = $('#fdv').hidden = false; P.free = false;
     $('#vman').textContent = on ? 'Scegli dal catalogo' : 'Non trovi il tuo? Inserisci a mano';
     if (on) setYears(Array.from({ length: 45 }, (_, i) => NOW - i), v && v.year, true);
     else { reset(1); P.b.set(brandItems(), 'Seleziona la marca', false); }
@@ -641,16 +642,17 @@ function initPicker(v) {
   if (inCat) {
     const vi = cat()[v.brand][v.model].findIndex(x => x[0] === v.version);
     pB({ m: v.model, vi: vi >= 0 ? String(vi) : '', y: v.year });
-  } else if (v) P.toggleMan(true);
+  } else if (v && v.brand && !cat()[v.brand]) { P.b.set(brandItems(), 'Seleziona la marca', false, v.brand); pB(); } else if (v) P.toggleMan(true);
   f.addEventListener('input', e => {
     if (e.target.id === 'vname') P.dirty = true;
-    else if (P.man && /^m(brand|model)$/.test(e.target.name)) autoName();
+    else if ((P.man && /^m(brand|model)$/.test(e.target.name)) || (P.free && e.target.name === 'fmodel')) autoName();
   });
 }
 function vehFields(f) {
-  const man = VP && VP.man, g = n => (f.elements[n] ? f.elements[n].value.trim() : '');
+  const man = VP && VP.man, free = VP && VP.free && !man, g = n => (f.elements[n] ? f.elements[n].value.trim() : '');
   let brand, model, version;
   if (man) { brand = g('mbrand'); model = g('mmodel'); version = g('mversion'); }
+  else if (free) { brand = VP.b.value; model = g('fmodel'); version = g('fversion'); }
   else if (VP && VP.b) { brand = VP.b.value; model = VP.m.value; version = VP.v.value ? VP.v.text.split(' · ')[0] : ''; }
   return { brand: brand || '', model: model || '', version: version || '', year: num(g('year')) || null };
 }

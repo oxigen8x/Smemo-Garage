@@ -34,3 +34,14 @@ Impostazioni > Backup > Esporta. Salva il file JSON su Drive: se cancelli i dati
 - Tutti i 184 loghi del repository vehiclespecs/brand-logos (sostituiscono i precedenti); la tendina Marca mostra tutte le marche auto. Le marche senza modelli in catalogo passano all'inserimento a mano con la marca già scelta.
 - Icona dell'app identica al logo dentro l'app.
 - Aggiornamenti più affidabili: l'app cerca prima la versione nuova in rete (cache solo offline) e si ricarica da sola quando si aggiorna.
+
+## Novità v1.7
+- Loghi moto: Ducati, KTM, Yamaha, Vespa, Husqvarna, Piaggio, Norton, Bajaj, Hero a colori; Aprilia, Harley-Davidson, Kawasaki, Triumph monocromatici (Honda, BMW e Suzuki dal set auto). La tendina Marca delle moto elenca queste marche.
+- Rimossa l'icona auto/moto nell'angolo delle schede veicolo in Home (resta il logo della marca, se scelta).
+
+## Novità v1.8
+- Catalogo auto completo da gor3a/vehicle-makes-models (ODbL 1.0): 216 marche, 3.640 modelli, versioni per motore. Moto: catalogo di esempio.
+- Marche con logo ma senza modelli: restano le tendine, Modello e Versione diventano campi di testo.
+- Via le icone auto/moto disegnate: al loro posto il logo della marca (badge, scheda veicolo, Home). Senza marca, solo il nome.
+- Loghi incorporati come data URI (compatibili anche con visualizzatori con CSP restrittiva).
+- Ricerca nelle tendine: prima i risultati che iniziano con il testo digitato.
